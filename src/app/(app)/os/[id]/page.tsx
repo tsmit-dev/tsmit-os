@@ -75,7 +75,9 @@ export default function OsDetailPage() {
 
     if (!order) return <p>Ordem de Serviço não encontrada.</p>;
 
-    const canUpdate = role === 'laboratorio' || role === 'admin';
+    const canEditSolution = role === 'laboratorio' || role === 'admin';
+    const canChangeStatus = role === 'admin' || role === 'laboratorio' || (role === 'suporte' && order.status === 'pronta_entrega');
+    const canShowUpdateCard = canEditSolution || canChangeStatus;
 
     return (
         <div className="container mx-auto space-y-6">
@@ -109,47 +111,79 @@ export default function OsDetailPage() {
                 <CardContent><p className="text-muted-foreground">{order.reportedProblem}</p></CardContent>
             </Card>
 
-            {canUpdate && (
+            {canShowUpdateCard && (
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Wrench /> Atualização da OS</CardTitle>
-                        <CardDescription>Altere o status e descreva a solução técnica aplicada.</CardDescription>
+                        <CardDescription>
+                            {role === 'suporte'
+                                ? 'Registre a entrega do equipamento ao cliente alterando o status para "Entregue".'
+                                : 'Altere o status e descreva a solução técnica aplicada.'
+                            }
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Status Atual</label>
-                            <Select value={currentStatus} onValueChange={(v: ServiceOrderStatus) => setCurrentStatus(v)} disabled={isUpdating}>
-                                <SelectTrigger className="w-[280px]">
-                                    <SelectValue placeholder="Selecione o status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="aberta">Aberta</SelectItem>
-                                    <SelectItem value="em_analise">Em Análise</SelectItem>
-                                    <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
-                                    <SelectItem value="finalizada">Finalizada</SelectItem>
-                                    <SelectItem value="pronta_entrega">Pronta para Entrega</SelectItem>
-                                    <SelectItem value="entregue">Entregue</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Solução Técnica</label>
-                            <Textarea 
-                                value={technicalSolution}
-                                onChange={(e) => setTechnicalSolution(e.target.value)}
-                                rows={6}
-                                placeholder="Descreva a solução técnica aplicada. Preencher este campo mudará o status para 'Pronta para Entrega'."
-                                disabled={isUpdating}
-                            />
-                        </div>
-                        <Button onClick={handleUpdate} disabled={isUpdating}>
+                        {canChangeStatus && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Status Atual</label>
+                                <Select
+                                    value={currentStatus}
+                                    onValueChange={(v: ServiceOrderStatus) => setCurrentStatus(v)}
+                                    disabled={isUpdating || (role === 'suporte' && order.status !== 'pronta_entrega')}
+                                >
+                                    <SelectTrigger className="w-[280px]">
+                                        <SelectValue placeholder="Selecione o status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {role === 'admin' && (
+                                            <>
+                                                <SelectItem value="aberta">Aberta</SelectItem>
+                                                <SelectItem value="em_analise">Em Análise</SelectItem>
+                                                <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
+                                                <SelectItem value="finalizada">Finalizada</SelectItem>
+                                                <SelectItem value="pronta_entrega">Pronta para Entrega</SelectItem>
+                                                <SelectItem value="entregue">Entregue</SelectItem>
+                                            </>
+                                        )}
+                                        {role === 'laboratorio' && (
+                                            <>
+                                                <SelectItem value="aberta">Aberta</SelectItem>
+                                                <SelectItem value="em_analise">Em Análise</SelectItem>
+                                                <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
+                                                <SelectItem value="finalizada">Finalizada</SelectItem>
+                                                <SelectItem value="pronta_entrega">Pronta para Entrega</SelectItem>
+                                            </>
+                                        )}
+                                        {role === 'suporte' && order.status === 'pronta_entrega' && (
+                                            <>
+                                                <SelectItem value="pronta_entrega" disabled>Pronta para Entrega</SelectItem>
+                                                <SelectItem value="entregue">Entregue</SelectItem>
+                                            </>
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+                        {canEditSolution && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Solução Técnica</label>
+                                <Textarea 
+                                    value={technicalSolution}
+                                    onChange={(e) => setTechnicalSolution(e.target.value)}
+                                    rows={6}
+                                    placeholder="Descreva a solução técnica aplicada. Preencher este campo mudará o status para 'Pronta para Entrega'."
+                                    disabled={isUpdating}
+                                />
+                            </div>
+                        )}
+                        <Button onClick={handleUpdate} disabled={isUpdating || (role === 'suporte' && currentStatus !== 'entregue')}>
                             {isUpdating ? 'Salvando...' : 'Salvar Alterações'}
                         </Button>
                     </CardContent>
                 </Card>
             )}
 
-            {!canUpdate && order.technicalSolution && (
+            {!canEditSolution && order.technicalSolution && (
                  <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><Wrench /> Solução Técnica</CardTitle></CardHeader>
                     <CardContent><p className="text-muted-foreground whitespace-pre-wrap">{order.technicalSolution}</p></CardContent>
