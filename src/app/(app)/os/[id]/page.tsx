@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
-import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp } from "lucide-react";
+import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer } from "lucide-react";
+import Link from "next/link";
 
 export default function OsDetailPage() {
     const params = useParams();
@@ -95,9 +96,17 @@ export default function OsDetailPage() {
 
     return (
         <div className="container mx-auto space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.id}</h1>
-                <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")} por {order.analyst}</p>
+            <div className="flex justify-between items-start">
+                <div>
+                    <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.id}</h1>
+                    <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")} por {order.analyst}</p>
+                </div>
+                <Link href={`/os/${order.id}/label`} passHref>
+                    <Button variant="outline">
+                        <Printer className="mr-2 h-4 w-4" />
+                        Imprimir Etiqueta
+                    </Button>
+                </Link>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

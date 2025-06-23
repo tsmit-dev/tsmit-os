@@ -85,7 +85,7 @@ export default function NewOsPage() {
         }
 
         try {
-            await addServiceOrder({
+            const newOrder = await addServiceOrder({
                 clientId: values.clientId,
                 collaborator: {
                     name: values.collaboratorName,
@@ -103,10 +103,10 @@ export default function NewOsPage() {
             });
             toast({
                 title: "Sucesso!",
-                description: "Nova Ordem de Serviço criada.",
+                description: `OS ${newOrder.id} criada.`,
                 variant: "default",
             });
-            router.push('/dashboard/ready-for-pickup');
+            router.push(`/os/${newOrder.id}`);
         } catch (error) {
              toast({
                 title: "Erro",
