@@ -1,3 +1,4 @@
+"use client"
 export type UserRole = 'admin' | 'laboratorio' | 'suporte';
 
 export type User = {
@@ -5,6 +6,13 @@ export type User = {
   name: string;
   email: string;
   role: UserRole;
+};
+
+export type Client = {
+  id: string;
+  name: string;
+  cnpj?: string;
+  address?: string;
 };
 
 export type ServiceOrderStatus =
@@ -25,7 +33,8 @@ export type LogEntry = {
 
 export type ServiceOrder = {
   id: string;
-  client: {
+  clientId: string;
+  collaborator: {
     name: string;
     email: string;
     phone: string;
@@ -37,9 +46,11 @@ export type ServiceOrder = {
     serialNumber: string;
   };
   reportedProblem: string;
-  analyst: string;
+  analyst: string; // The user who created the OS
   status: ServiceOrderStatus;
   technicalSolution?: string;
   createdAt: Date;
   logs: LogEntry[];
+  // Joined properties for easier display
+  clientName?: string; 
 };

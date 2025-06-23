@@ -9,16 +9,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
-import { User, HardDrive, FileText, Wrench, History, ArrowRight } from "lucide-react";
+import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp } from "lucide-react";
 
 export default function OsDetailPage() {
     const params = useParams();
     const id = params.id as string;
-    const { role } = useAuth();
+    const { role, user } = useAuth();
     const { toast } = useToast();
     const router = useRouter();
 
@@ -47,16 +48,16 @@ export default function OsDetailPage() {
     }, [id, toast, router]);
 
     const handleUpdate = async () => {
-        if (!order || !currentStatus || !role) return;
+        if (!order || !currentStatus || !user) return;
         setIsUpdating(true);
         try {
-            const updatedOrder = await updateServiceOrder(order.id, currentStatus, role, technicalSolution);
+            const updatedOrder = await updateServiceOrder(order.id, currentStatus, user.name, technicalSolution);
             setOrder(updatedOrder);
             toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
-             // TODO: Trigger email notification to client if status is 'pronta_entrega'
-            if (currentStatus === 'pronta_entrega') {
-                console.log(`Simulating email to ${order.client.email}: Your equipment is ready for pickup.`);
-                toast({ title: "Notificação", description: `Cliente ${order.client.name} seria notificado por e-mail.` });
+            
+            if (updatedOrder?.status === 'pronta_entrega') {
+                console.log(`Simulating email to ${order.collaborator.email}: Your equipment is ready for pickup.`);
+                toast({ title: "Notificação", description: `Colaborador ${order.collaborator.name} seria notificado por e-mail.` });
             }
         } catch (error) {
             toast({ title: "Erro", description: "Falha ao atualizar a OS.", variant: "destructive" });
@@ -64,6 +65,13 @@ export default function OsDetailPage() {
             setIsUpdating(false);
         }
     };
+
+    const handleTechnicalSolutionChange = (newSolution: string) => {
+        setTechnicalSolution(newSolution);
+        if (newSolution && role === 'laboratorio' && currentStatus !== 'pronta_entrega' && currentStatus !== 'entregue' && currentStatus !== 'finalizada') {
+            setCurrentStatus('pronta_entrega');
+        }
+    }
     
     if (loading) return <OsDetailSkeleton />;
 
@@ -72,12 +80,13 @@ export default function OsDetailPage() {
     const canEditSolution = role === 'laboratorio' || role === 'admin';
     const canChangeStatus = role === 'admin' || role === 'laboratorio' || (role === 'suporte' && order.status === 'pronta_entrega');
     const canShowUpdateCard = canEditSolution || canChangeStatus;
+    const canUploadAttachment = role === 'laboratorio' || role === 'admin';
 
     return (
         <div className="container mx-auto space-y-6">
             <div>
                 <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.id}</h1>
-                <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")}</p>
+                <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")} por {order.analyst}</p>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -91,11 +100,12 @@ export default function OsDetailPage() {
                     </CardContent>
                 </Card>
                 <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><User /> Cliente</CardTitle></CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                        <div><p className="font-semibold text-muted-foreground">Nome</p><p>{order.client.name}</p></div>
-                        <div><p className="font-semibold text-muted-foreground">Email</p><p>{order.client.email}</p></div>
-                        <div><p className="font-semibold text-muted-foreground">Telefone</p><p>{order.client.phone}</p></div>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><Briefcase /> Cliente e Contato</CardTitle></CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                        <div><p className="font-semibold text-muted-foreground">Empresa</p><p>{order.clientName}</p></div>
+                        <div><p className="font-semibold text-muted-foreground">Contato</p><p>{order.collaborator.name}</p></div>
+                        <div><p className="font-semibold text-muted-foreground">Email Contato</p><p>{order.collaborator.email}</p></div>
+                        <div><p className="font-semibold text-muted-foreground">Telefone Contato</p><p>{order.collaborator.phone}</p></div>
                     </CardContent>
                 </Card>
             </div>
@@ -118,35 +128,28 @@ export default function OsDetailPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {canChangeStatus && (
-                            <div className="space-y-2">
+                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Status Atual</label>
                                 <Select
                                     value={currentStatus}
                                     onValueChange={(v: ServiceOrderStatus) => setCurrentStatus(v)}
-                                    disabled={isUpdating || (role === 'laboratorio' && !!technicalSolution) || (role === 'suporte' && order.status !== 'pronta_entrega')}
+                                    disabled={isUpdating}
                                 >
                                     <SelectTrigger className="w-[280px]">
                                         <SelectValue placeholder="Selecione o status" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {role === 'admin' && (
+                                        {(role === 'admin' || role === 'laboratorio') && (
                                             <>
                                                 <SelectItem value="aberta">Aberta</SelectItem>
                                                 <SelectItem value="em_analise">Em Análise</SelectItem>
                                                 <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
                                                 <SelectItem value="finalizada">Finalizada</SelectItem>
                                                 <SelectItem value="pronta_entrega">Pronta para Entrega</SelectItem>
-                                                <SelectItem value="entregue">Entregue</SelectItem>
                                             </>
                                         )}
-                                        {role === 'laboratorio' && (
-                                            <>
-                                                <SelectItem value="aberta">Aberta</SelectItem>
-                                                <SelectItem value="em_analise">Em Análise</SelectItem>
-                                                <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
-                                                <SelectItem value="finalizada">Finalizada</SelectItem>
-                                                <SelectItem value="pronta_entrega">Pronta para Entrega</SelectItem>
-                                            </>
+                                        {role === 'admin' && (
+                                            <SelectItem value="entregue">Entregue</SelectItem>
                                         )}
                                         {role === 'suporte' && order.status === 'pronta_entrega' && (
                                             <>
@@ -163,13 +166,7 @@ export default function OsDetailPage() {
                                 <label className="text-sm font-medium">Solução Técnica</label>
                                 <Textarea 
                                     value={technicalSolution}
-                                    onChange={(e) => {
-                                        const newSolution = e.target.value;
-                                        setTechnicalSolution(newSolution);
-                                        if (newSolution && role === 'laboratorio' && currentStatus !== 'pronta_entrega' && currentStatus !== 'entregue') {
-                                            setCurrentStatus('pronta_entrega');
-                                        }
-                                    }}
+                                    onChange={(e) => handleTechnicalSolutionChange(e.target.value)}
                                     rows={6}
                                     placeholder="Descreva a solução técnica aplicada. Preencher este campo mudará o status para 'Pronta para Entrega'."
                                     disabled={isUpdating}
@@ -187,6 +184,20 @@ export default function OsDetailPage() {
                  <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><Wrench /> Solução Técnica</CardTitle></CardHeader>
                     <CardContent><p className="text-muted-foreground whitespace-pre-wrap">{order.technicalSolution}</p></CardContent>
+                </Card>
+            )}
+
+            {canUploadAttachment && (
+                <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><FileUp /> Anexos</CardTitle></CardHeader>
+                    <CardContent>
+                        <p className="text-sm text-muted-foreground mb-4">Anexe fotos ou documentos relevantes à OS.</p>
+                        <div className="flex items-center gap-4">
+                            <Input type="file" className="max-w-xs" />
+                            <Button variant="outline">Enviar</Button>
+                        </div>
+                         <p className="text-xs text-muted-foreground mt-2">Funcionalidade de upload de anexos em desenvolvimento.</p>
+                    </CardContent>
                 </Card>
             )}
             

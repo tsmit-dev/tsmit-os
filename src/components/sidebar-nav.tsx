@@ -11,7 +11,7 @@ import {
   SidebarMenuButton,
   SidebarSeparator,
 } from './ui/sidebar';
-import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, LineChart } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Badge } from './ui/badge';
@@ -32,7 +32,9 @@ export function SidebarNav() {
     { href: '/dashboard/ready-for-pickup', label: 'Prontas p/ Entrega', icon: PackageCheck, roles: ['suporte', 'admin'] },
     { href: '/os/new', label: 'Nova OS', icon: PlusCircle, roles: ['suporte', 'admin'] },
     { href: '/os', label: 'Todas as OS', icon: HardDrive, roles: ['admin', 'laboratorio'] },
+    { href: '/clients', label: 'Clientes', icon: Briefcase, roles: ['suporte', 'admin'] },
     { href: '/admin/users', label: 'Usuários', icon: Users, roles: ['admin'] },
+    { href: '/admin/reports', label: 'Relatórios', icon: LineChart, roles: ['admin'] },
   ];
 
   const visibleItems = navItems.filter(item => role && item.roles.includes(role));

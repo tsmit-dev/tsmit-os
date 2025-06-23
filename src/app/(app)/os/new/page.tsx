@@ -15,42 +15,46 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { addServiceOrder } from "@/lib/data";
+import { useEffect, useState } from "react";
+import { addServiceOrder, getClients } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { PlusCircle } from "lucide-react";
+import { Client } from "@/lib/types";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const formSchema = z.object({
-  clientName: z.string().min(2, "Nome do cliente é obrigatório."),
-  clientEmail: z.string().email("E-mail inválido."),
-  clientPhone: z.string().min(10, "Telefone inválido."),
+  clientId: z.string({ required_error: "Selecione um cliente." }),
+  collaboratorName: z.string().min(2, "Nome do colaborador é obrigatório."),
+  collaboratorEmail: z.string().email("E-mail do colaborador inválido."),
+  collaboratorPhone: z.string().min(10, "Telefone do colaborador inválido."),
   equipType: z.string().min(2, "Tipo de equipamento é obrigatório."),
   equipBrand: z.string().min(2, "Marca é obrigatória."),
   equipModel: z.string().min(1, "Modelo é obrigatório."),
   equipSerial: z.string().min(1, "Número de série é obrigatório."),
   problem: z.string().min(10, "Descrição do problema deve ter no mínimo 10 caracteres."),
-  analyst: z.string().min(2, "Nome do analista é obrigatório."),
 });
 
 export default function NewOsPage() {
-    const { role } = useAuth();
+    const { role, user } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
+    const [clients, setClients] = useState<Client[]>([]);
+    const [loadingClients, setLoadingClients] = useState(true);
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            clientName: "",
-            clientEmail: "",
-            clientPhone: "",
+            collaboratorName: "",
+            collaboratorEmail: "",
+            collaboratorPhone: "",
             equipType: "",
             equipBrand: "",
             equipModel: "",
             equipSerial: "",
             problem: "",
-            analyst: "",
         },
     });
 
@@ -60,13 +64,33 @@ export default function NewOsPage() {
         }
     }, [role, router]);
 
+    useEffect(() => {
+        async function fetchClients() {
+            try {
+                const clientData = await getClients();
+                setClients(clientData);
+            } catch (error) {
+                toast({ title: "Erro", description: "Não foi possível carregar os clientes.", variant: "destructive" });
+            } finally {
+                setLoadingClients(false);
+            }
+        }
+        fetchClients();
+    }, [toast]);
+
     async function onSubmit(values: z.infer<typeof formSchema>) {
+        if (!user) {
+            toast({ title: "Erro de autenticação", description: "Usuário não encontrado.", variant: "destructive" });
+            return;
+        }
+
         try {
             await addServiceOrder({
-                client: {
-                    name: values.clientName,
-                    email: values.clientEmail,
-                    phone: values.clientPhone,
+                clientId: values.clientId,
+                collaborator: {
+                    name: values.collaboratorName,
+                    email: values.collaboratorEmail,
+                    phone: values.collaboratorPhone,
                 },
                 equipment: {
                     type: values.equipType,
@@ -75,7 +99,7 @@ export default function NewOsPage() {
                     serialNumber: values.equipSerial,
                 },
                 reportedProblem: values.problem,
-                analyst: values.analyst,
+                analyst: user.name, // Logged in user creates the OS
             });
             toast({
                 title: "Sucesso!",
@@ -91,6 +115,14 @@ export default function NewOsPage() {
             });
         }
     }
+    
+    if (loadingClients) {
+        return <div className="space-y-4">
+            <Skeleton className="h-10 w-1/2" />
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-48 w-full" />
+        </div>
+    }
 
   return (
     <div className="container mx-auto">
@@ -103,17 +135,29 @@ export default function NewOsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Informações do Cliente</CardTitle>
+                        <CardTitle>Informações do Cliente e Colaborador</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                         <FormField control={form.control} name="clientName" render={({ field }) => (
-                            <FormItem><FormLabel>Nome</FormLabel><FormControl><Input placeholder="Nome completo do cliente" {...field} /></FormControl><FormMessage /></FormItem>
+                         <FormField control={form.control} name="clientId" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Empresa / Cliente</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione um cliente" /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        {clients.map(client => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
                          )} />
-                         <FormField control={form.control} name="clientEmail" render={({ field }) => (
-                            <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="email@cliente.com" {...field} /></FormControl><FormMessage /></FormItem>
+                         <FormField control={form.control} name="collaboratorName" render={({ field }) => (
+                            <FormItem><FormLabel>Nome do Colaborador (Contato)</FormLabel><FormControl><Input placeholder="Nome de quem trouxe o equipamento" {...field} /></FormControl><FormMessage /></FormItem>
                          )} />
-                         <FormField control={form.control} name="clientPhone" render={({ field }) => (
-                            <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>
+                         <FormField control={form.control} name="collaboratorEmail" render={({ field }) => (
+                            <FormItem><FormLabel>Email do Colaborador</FormLabel><FormControl><Input placeholder="email.contato@cliente.com" {...field} /></FormControl><FormMessage /></FormItem>
+                         )} />
+                         <FormField control={form.control} name="collaboratorPhone" render={({ field }) => (
+                            <FormItem><FormLabel>Telefone do Colaborador</FormLabel><FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>
                          )} />
                     </CardContent>
                 </Card>
@@ -140,15 +184,15 @@ export default function NewOsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Detalhes do Problema</CardTitle>
-                    <CardDescription>Descreva o problema relatado pelo cliente e informe o nome do responsável pela coleta/análise inicial.</CardDescription>
+                    <CardDescription>Descreva o problema relatado pelo cliente. O analista responsável será você.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <FormField control={form.control} name="problem" render={({ field }) => (
                         <FormItem><FormLabel>Problema Relatado</FormLabel><FormControl><Textarea rows={5} placeholder="Descreva em detalhes o problema..." {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
-                    <FormField control={form.control} name="analyst" render={({ field }) => (
-                        <FormItem><FormLabel>Nome do Analista/Coletor</FormLabel><FormControl><Input placeholder="Nome do responsável" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
+                     <div className="text-sm text-muted-foreground">
+                        <p>Analista Responsável: <span className="font-medium text-foreground">{user?.name}</span></p>
+                    </div>
                 </CardContent>
             </Card>
           <div className="flex justify-end">
