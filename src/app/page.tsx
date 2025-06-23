@@ -4,7 +4,7 @@ import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRouter } from 'next/navigation';
-import { LogIn, Wrench } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
+import { TsmitLogo } from '@/components/tsmit-logo';
 
 const formSchema = z.object({
   email: z.string().email("E-mail inválido."),
@@ -50,11 +51,8 @@ export default function LoginPage() {
   return (
     <main className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-black">
       <Card className="w-full max-w-sm shadow-lg">
-        <CardHeader className="text-center">
-          <div className="flex justify-center items-center mb-4">
-            <Wrench className="w-10 h-10 text-primary" />
-          </div>
-          <CardTitle className="text-3xl font-bold font-headline">TSMIT</CardTitle>
+        <CardHeader className="text-center space-y-4">
+          <TsmitLogo className="w-48 mx-auto text-primary" />
           <CardDescription>Sistema de Controle de Ordens de Serviço</CardDescription>
         </CardHeader>
         <CardContent>

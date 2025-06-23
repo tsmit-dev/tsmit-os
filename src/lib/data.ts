@@ -1,14 +1,14 @@
 "use client"
-import { ServiceOrder, ServiceOrderStatus, User } from "./types";
+import { ServiceOrder, ServiceOrderStatus, User, UserRole } from "./types";
 
 // Simulate API latency
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-const users: (User & {password: string})[] = [
-    { name: 'Admin', email: 'admin@tsmit.com.br', role: 'admin', password: 'asd' },
-    { name: 'Suporte', email: 'suporte@tsmit.com.br', role: 'suporte', password: 'asd' },
-    { name: 'Laboratório', email: 'laboratorio@tsmit.com.br', role: 'laboratorio', password: 'asd' },
-    { name: 'João Victor', email: 'joaovictor@tsmit.com.br', role: 'admin', password: 'asd.123' },
+let users: (User & {password: string})[] = [
+    { id: 'user-1', name: 'Admin', email: 'admin@tsmit.com.br', role: 'admin', password: 'asd' },
+    { id: 'user-2', name: 'Suporte', email: 'suporte@tsmit.com.br', role: 'suporte', password: 'asd' },
+    { id: 'user-3', name: 'Laboratório', email: 'laboratorio@tsmit.com.br', role: 'laboratorio', password: 'asd' },
+    { id: 'user-4', name: 'João Victor', email: 'joaovictor@tsmit.com.br', role: 'admin', password: 'asd.123' },
 ];
 
 export const getUserByCredentials = async (email: string, password?: string): Promise<User | null> => {
@@ -24,6 +24,72 @@ export const getUserByCredentials = async (email: string, password?: string): Pr
     return null;
 };
 
+// User CRUD
+export const getUsers = async (): Promise<User[]> => {
+    await delay(200);
+    return users.map(u => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, ...userWithoutPassword } = u;
+        return userWithoutPassword;
+    });
+};
+
+export const getUserById = async (id: string): Promise<User | null> => {
+    await delay(200);
+    const user = users.find(u => u.id === id);
+    if (user) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+    }
+    return null;
+}
+
+export type UserData = {
+    name: string;
+    email: string;
+    role: UserRole;
+    password?: string;
+};
+
+export const addUser = async (data: UserData): Promise<User> => {
+    await delay(300);
+    const newUser = {
+        ...data,
+        id: `user-${Date.now()}`,
+        password: data.password || 'default-password'
+    };
+    users.push(newUser);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...userWithoutPassword } = newUser;
+    return userWithoutPassword;
+};
+
+export const updateUser = async (id: string, data: Partial<UserData>): Promise<User | null> => {
+    await delay(300);
+    let userIndex = users.findIndex(u => u.id === id);
+    if (userIndex === -1) return null;
+
+    const updatedUser = { ...users[userIndex], ...data };
+     if (!data.password || data.password.trim() === '') {
+        updatedUser.password = users[userIndex].password;
+    }
+    users[userIndex] = updatedUser;
+    
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...userWithoutPassword } = updatedUser;
+    return userWithoutPassword;
+};
+
+export const deleteUser = async (id: string): Promise<boolean> => {
+    await delay(300);
+    const initialLength = users.length;
+    users = users.filter(u => u.id !== id);
+    return users.length < initialLength;
+};
+
+
+// Service Order Data
 let serviceOrders: ServiceOrder[] = [
     {
         id: 'OS-001',
@@ -127,7 +193,7 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
         responsible,
         fromStatus: oldStatus,
         toStatus: newStatus,
-        observation: technicalSolution ? 'Solução técnica preenchida/atualizada.' : 'Status atualizado manualmente.'
+        observation: technicalSolution ? 'Solução técnica preenchida/atualizada.' : 'Status atualizado manually.'
     });
 
     if (technicalSolution && newStatus !== 'pronta_entrega') {

@@ -11,10 +11,11 @@ import {
   SidebarMenuButton,
   SidebarSeparator,
 } from './ui/sidebar';
-import { LayoutDashboard, PlusCircle, Wrench, HardDrive, LogOut, PackageCheck } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Badge } from './ui/badge';
+import { TsmitIcon } from './tsmit-icon';
 
 export function SidebarNav() {
   const { role, logout, user } = useAuth();
@@ -31,6 +32,7 @@ export function SidebarNav() {
     { href: '/dashboard/ready-for-pickup', label: 'Prontas p/ Entrega', icon: PackageCheck, roles: ['suporte', 'admin'] },
     { href: '/os/new', label: 'Nova OS', icon: PlusCircle, roles: ['suporte', 'admin'] },
     { href: '/os', label: 'Todas as OS', icon: HardDrive, roles: ['admin', 'laboratorio'] },
+    { href: '/admin/users', label: 'Usuários', icon: Users, roles: ['admin'] },
   ];
 
   const visibleItems = navItems.filter(item => role && item.roles.includes(role));
@@ -38,16 +40,16 @@ export function SidebarNav() {
   return (
     <>
       <SidebarHeader>
-        <div className="flex items-center gap-2">
-            <Wrench className="w-6 h-6 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">TSMIT OS</h2>
-        </div>
+        <Link href="/dashboard" className="flex items-center gap-2 p-2">
+            <TsmitIcon className="w-7 h-7 text-primary" />
+            <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">TSMIT OS</span>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
           {visibleItems.map(item => (
             <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)} tooltip={item.label}>
+                <SidebarMenuButton asChild isActive={pathname.startsWith(item.href) && (item.href !== '/dashboard' || pathname === '/dashboard')} tooltip={item.label}>
                     <Link href={item.href}>
                         <item.icon />
                         <span>{item.label}</span>
