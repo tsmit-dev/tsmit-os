@@ -164,8 +164,7 @@ let serviceOrders: ServiceOrder[] = [
         createdAt: new Date('2023-10-02T14:30:00Z'),
         logs: [
              { timestamp: new Date('2023-10-02T14:30:00Z'), responsible: 'Suporte TSMIT', fromStatus: 'aberta', toStatus: 'em_analise' },
-             { timestamp: new Date('2023-10-03T11:00:00Z'), responsible: 'Laboratório TSMIT', fromStatus: 'em_analise', toStatus: 'finalizada' },
-             { timestamp: new Date('2023-10-03T11:05:00Z'), responsible: 'Sistema', fromStatus: 'finalizada', toStatus: 'pronta_entrega', observation: 'Solução técnica preenchida.' },
+             { timestamp: new Date('2023-10-03T11:00:00Z'), responsible: 'Laboratório TSMIT', fromStatus: 'em_analise', toStatus: 'pronta_entrega', observation: 'Nota/Solução: Upgrade de memória RAM de 8GB para 16GB e troca do HD por um SSD de 512GB. Sistema operacional reinstalado e otimizado.' },
         ]
     },
     {
@@ -193,8 +192,7 @@ let serviceOrders: ServiceOrder[] = [
         technicalSolution: 'HD de 2TB do slot 3 substituído por um novo. Rebuild da RAID concluído com sucesso.',
         createdAt: new Date('2023-09-25T11:00:00Z'),
         logs: [
-             { timestamp: new Date('2023-09-25T11:00:00Z'), responsible: 'Suporte TSMIT', fromStatus: 'aberta', toStatus: 'finalizada' },
-             { timestamp: new Date('2023-09-25T18:00:00Z'), responsible: 'Sistema', fromStatus: 'finalizada', toStatus: 'pronta_entrega' },
+             { timestamp: new Date('2023-09-25T11:00:00Z'), responsible: 'Suporte TSMIT', fromStatus: 'aberta', toStatus: 'pronta_entrega', observation: 'Nota/Solução: HD de 2TB do slot 3 substituído por um novo. Rebuild da RAID concluído com sucesso.' },
              { timestamp: new Date('2023-09-26T14:00:00Z'), responsible: 'Suporte TSMIT', fromStatus: 'pronta_entrega', toStatus: 'entregue', observation: 'Entregue ao cliente.' }
         ]
     }
@@ -241,7 +239,7 @@ export const addServiceOrder = async (data: Omit<ServiceOrder, 'id' | 'createdAt
     return newOrder;
 };
 
-export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string) => {
+export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string) => {
     await delay(500);
     const orderIndex = serviceOrders.findIndex(os => os.id === id);
     if (orderIndex === -1) return null;
@@ -259,20 +257,8 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
         responsible,
         fromStatus: oldStatus,
         toStatus: newStatus,
-        observation: technicalSolution ? 'Solução técnica preenchida/atualizada.' : 'Status atualizado manualmente.'
+        observation: observation
     });
-
-    if (technicalSolution && newStatus !== 'pronta_entrega' && newStatus !== 'entregue' && newStatus !== 'finalizada') {
-        const originalStatus = newStatus
-        order.status = 'pronta_entrega';
-        order.logs.push({
-            timestamp: new Date(),
-            responsible: 'Sistema',
-            fromStatus: originalStatus,
-            toStatus: 'pronta_entrega',
-            observation: 'Status alterado para "Pronta para Entrega" devido ao preenchimento da solução técnica.'
-        });
-    }
 
     serviceOrders[orderIndex] = order;
     

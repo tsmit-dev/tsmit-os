@@ -49,13 +49,27 @@ export default function OsDetailPage() {
 
     const handleUpdate = async () => {
         if (!order || !currentStatus || !user) return;
+
+        // Check for changes
+        if (currentStatus === order.status && technicalSolution === (order.technicalSolution || '')) {
+            toast({ title: "Nenhuma alteração", description: "Nenhuma alteração para salvar." });
+            return;
+        }
+        
         setIsUpdating(true);
         try {
-            const updatedOrder = await updateServiceOrder(order.id, currentStatus, user.name, technicalSolution);
+            const updatedOrder = await updateServiceOrder(
+                order.id, 
+                currentStatus, 
+                user.name, 
+                technicalSolution, 
+                technicalSolution.trim() ? `Nota/Solução: ${technicalSolution}` : undefined
+            );
+            
             setOrder(updatedOrder);
             toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
             
-            if (updatedOrder?.status === 'pronta_entrega') {
+            if (updatedOrder?.status === 'pronta_entrega' && order.status !== 'pronta_entrega') {
                 console.log(`Simulating email to ${order.collaborator.email}: Your equipment is ready for pickup.`);
                 toast({ title: "Notificação", description: `Colaborador ${order.collaborator.name} seria notificado por e-mail.` });
             }
@@ -68,9 +82,6 @@ export default function OsDetailPage() {
 
     const handleTechnicalSolutionChange = (newSolution: string) => {
         setTechnicalSolution(newSolution);
-        if (newSolution && role === 'laboratorio' && currentStatus !== 'pronta_entrega' && currentStatus !== 'entregue' && currentStatus !== 'finalizada') {
-            setCurrentStatus('pronta_entrega');
-        }
     }
     
     if (loading) return <OsDetailSkeleton />;
@@ -122,7 +133,7 @@ export default function OsDetailPage() {
                         <CardDescription>
                             {role === 'suporte'
                                 ? 'Registre a entrega do equipamento ao cliente alterando o status para "Entregue".'
-                                : 'Altere o status e descreva a solução técnica aplicada.'
+                                : 'Altere o status e/ou adicione uma nota com a solução técnica, que será salva no histórico.'
                             }
                         </CardDescription>
                     </CardHeader>
@@ -144,7 +155,6 @@ export default function OsDetailPage() {
                                                 <SelectItem value="aberta">Aberta</SelectItem>
                                                 <SelectItem value="em_analise">Em Análise</SelectItem>
                                                 <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
-                                                <SelectItem value="finalizada">Finalizada</SelectItem>
                                                 <SelectItem value="pronta_entrega">Pronta para Entrega</SelectItem>
                                             </>
                                         )}
@@ -163,12 +173,12 @@ export default function OsDetailPage() {
                         )}
                         {canEditSolution && (
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Solução Técnica</label>
+                                <label className="text-sm font-medium">Solução Técnica / Nota</label>
                                 <Textarea 
                                     value={technicalSolution}
                                     onChange={(e) => handleTechnicalSolutionChange(e.target.value)}
                                     rows={6}
-                                    placeholder="Descreva a solução técnica aplicada. Preencher este campo mudará o status para 'Pronta para Entrega'."
+                                    placeholder="Descreva a solução técnica ou adicione uma nota. Este texto será salvo no histórico."
                                     disabled={isUpdating}
                                 />
                             </div>
@@ -182,7 +192,7 @@ export default function OsDetailPage() {
 
             {!canEditSolution && order.technicalSolution && (
                  <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><Wrench /> Solução Técnica</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><Wrench /> Solução Técnica / Nota</CardTitle></CardHeader>
                     <CardContent><p className="text-muted-foreground whitespace-pre-wrap">{order.technicalSolution}</p></CardContent>
                 </Card>
             )}
@@ -206,7 +216,7 @@ export default function OsDetailPage() {
                 <CardContent>
                     <ul className="space-y-4">
                         {order.logs.slice().reverse().map((log, index) => (
-                            <li key={index} className="flex items-center gap-4 text-sm">
+                            <li key={index} className="flex items-start gap-4 text-sm">
                                 <div className="text-muted-foreground text-right w-32 shrink-0">
                                     <p>{format(new Date(log.timestamp), "dd/MM/yy")}</p>
                                     <p>{format(new Date(log.timestamp), "HH:mm")}</p>
@@ -218,7 +228,7 @@ export default function OsDetailPage() {
                                         <StatusBadge status={log.toStatus} />
                                     </div>
                                     <p className="text-xs text-muted-foreground mt-1">por: {log.responsible}</p>
-                                    {log.observation && <p className="text-xs mt-1 p-2 bg-gray-50 rounded-md dark:bg-gray-800">{log.observation}</p>}
+                                    {log.observation && <p className="text-sm mt-2 p-2 bg-gray-50 rounded-md dark:bg-gray-800 whitespace-pre-wrap">{log.observation}</p>}
                                 </div>
                             </li>
                         ))}

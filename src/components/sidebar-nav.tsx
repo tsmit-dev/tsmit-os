@@ -31,7 +31,7 @@ export function SidebarNav() {
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'laboratorio'] },
     { href: '/dashboard/ready-for-pickup', label: 'Prontas p/ Entrega', icon: PackageCheck, roles: ['suporte', 'admin'] },
     { href: '/os/new', label: 'Nova OS', icon: PlusCircle, roles: ['suporte', 'admin'] },
-    { href: '/os', label: 'Todas as OS', icon: HardDrive, roles: ['admin', 'laboratorio'] },
+    { href: '/os', label: 'Todas as OS', icon: HardDrive, roles: ['admin', 'laboratorio', 'suporte'] },
     { href: '/clients', label: 'Clientes', icon: Briefcase, roles: ['suporte', 'admin'] },
     { href: '/admin/users', label: 'Usuários', icon: Users, roles: ['admin'] },
     { href: '/admin/reports', label: 'Relatórios', icon: LineChart, roles: ['admin'] },

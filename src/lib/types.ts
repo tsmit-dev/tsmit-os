@@ -19,7 +19,6 @@ export type ServiceOrderStatus =
   | 'aberta'
   | 'em_analise'
   | 'aguardando_peca'
-  | 'finalizada'
   | 'pronta_entrega'
   | 'entregue';
 

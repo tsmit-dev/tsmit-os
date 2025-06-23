@@ -15,7 +15,7 @@ export default function AllOsPage() {
     const router = useRouter();
 
     useEffect(() => {
-        if (role && !['admin', 'laboratorio'].includes(role)) {
+        if (role && !['admin', 'laboratorio', 'suporte'].includes(role)) {
             router.replace('/dashboard');
             return;
         }
@@ -31,7 +31,9 @@ export default function AllOsPage() {
             }
         };
         
-        fetchOrders();
+        if (role) {
+            fetchOrders();
+        }
     }, [role, router]);
 
     if (loading) {
