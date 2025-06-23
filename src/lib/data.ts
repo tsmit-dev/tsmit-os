@@ -1,5 +1,28 @@
 "use client"
-import { ServiceOrder, ServiceOrderStatus } from "./types";
+import { ServiceOrder, ServiceOrderStatus, User } from "./types";
+
+// Simulate API latency
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+const users: (User & {password: string})[] = [
+    { name: 'Admin', email: 'admin@tsmit.com.br', role: 'admin', password: 'asd' },
+    { name: 'Suporte', email: 'suporte@tsmit.com.br', role: 'suporte', password: 'asd' },
+    { name: 'Laboratório', email: 'laboratorio@tsmit.com.br', role: 'laboratorio', password: 'asd' },
+    { name: 'João Victor', email: 'joaovictor@tsmit.com.br', role: 'admin', password: 'asd.123' },
+];
+
+export const getUserByCredentials = async (email: string, password?: string): Promise<User | null> => {
+    await delay(200);
+    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+    
+    if (user) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+    }
+    
+    return null;
+};
 
 let serviceOrders: ServiceOrder[] = [
     {
@@ -53,14 +76,11 @@ let serviceOrders: ServiceOrder[] = [
         createdAt: new Date('2023-09-25T11:00:00Z'),
         logs: [
              { timestamp: new Date('2023-09-25T11:00:00Z'), responsible: 'Fernanda Lima', fromStatus: 'aberta', toStatus: 'finalizada' },
-             { timestamp: new Date('2023-09-25T18:00:00Z'), responsible: 'Sistema', from_status: 'finalizada', to_status: 'pronta_entrega' },
+             { timestamp: new Date('2023-09-25T18:00:00Z'), responsible: 'Sistema', fromStatus: 'finalizada', toStatus: 'pronta_entrega' },
              { timestamp: new Date('2023-09-26T14:00:00Z'), responsible: 'Carlos Silva', fromStatus: 'pronta_entrega', toStatus: 'entregue', observation: 'Entregue ao cliente.' }
-        ].map(l => ({ ...l, fromStatus: l.from_status || l.fromStatus, toStatus: l.to_status || l.toStatus }))
+        ]
     }
 ];
-
-// Simulate API latency
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 export const getServiceOrders = async () => {
     await delay(500);

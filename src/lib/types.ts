@@ -1,5 +1,11 @@
 export type UserRole = 'admin' | 'laboratorio' | 'suporte';
 
+export type User = {
+  name: string;
+  email: string;
+  role: UserRole;
+};
+
 export type ServiceOrderStatus =
   | 'aberta'
   | 'em_analise'

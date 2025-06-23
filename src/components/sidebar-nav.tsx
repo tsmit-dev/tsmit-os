@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { useAuth } from './auth-provider';
-import { Button } from './ui/button';
 import {
   SidebarContent,
   SidebarHeader,
@@ -18,7 +17,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Badge } from './ui/badge';
 
 export function SidebarNav() {
-  const { role, logout } = useAuth();
+  const { role, logout, user } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -59,8 +58,9 @@ export function SidebarNav() {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
-        <div className='p-2 text-center group-data-[collapsible=icon]:hidden'>
-            <Badge variant="outline">Perfil: {role}</Badge>
+        <div className='p-2 text-center group-data-[collapsible=icon]:hidden space-y-1'>
+            <p className="text-sm font-semibold truncate" title={user?.email ?? ''}>{user?.name}</p>
+            <Badge variant="outline">{role}</Badge>
         </div>
         <SidebarSeparator />
         <SidebarMenu>

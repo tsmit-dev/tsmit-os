@@ -1,29 +1,39 @@
 "use client";
 
 import React, { createContext, useState, useContext, ReactNode, useCallback } from 'react';
-import { UserRole } from '@/lib/types';
+import { User, UserRole } from '@/lib/types';
+import { getUserByCredentials } from '@/lib/data';
 
 interface AuthContextType {
+  user: User | null;
   role: UserRole | null;
-  setRole: (role: UserRole) => void;
+  login: (email: string, pass: string) => Promise<boolean>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [role, setRole] = useState<UserRole | null>(null);
+  const [user, setUser] = useState<User | null>(null);
 
-  const handleSetRole = useCallback((newRole: UserRole) => {
-    setRole(newRole);
+  const login = useCallback(async (email: string, pass: string): Promise<boolean> => {
+    const foundUser = await getUserByCredentials(email, pass);
+    if (foundUser) {
+      setUser(foundUser);
+      return true;
+    }
+    setUser(null);
+    return false;
   }, []);
 
   const handleLogout = useCallback(() => {
-    setRole(null);
+    setUser(null);
   }, []);
 
+  const role = user ? user.role : null;
+
   return (
-    <AuthContext.Provider value={{ role, setRole: handleSetRole, logout: handleLogout }}>
+    <AuthContext.Provider value={{ user, role, login, logout: handleLogout }}>
       {children}
     </AuthContext.Provider>
   );
