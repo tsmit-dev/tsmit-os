@@ -45,12 +45,6 @@ export default function OsDetailPage() {
             });
         }
     }, [id, toast, router]);
-    
-    useEffect(() => {
-        if (technicalSolution && currentStatus !== 'pronta_entrega' && currentStatus !== 'entregue' && role === 'laboratorio') {
-            setCurrentStatus('pronta_entrega');
-        }
-    }, [technicalSolution, currentStatus, role]);
 
     const handleUpdate = async () => {
         if (!order || !currentStatus || !role) return;
@@ -129,7 +123,7 @@ export default function OsDetailPage() {
                                 <Select
                                     value={currentStatus}
                                     onValueChange={(v: ServiceOrderStatus) => setCurrentStatus(v)}
-                                    disabled={isUpdating || (role === 'suporte' && order.status !== 'pronta_entrega')}
+                                    disabled={isUpdating || (role === 'laboratorio' && !!technicalSolution) || (role === 'suporte' && order.status !== 'pronta_entrega')}
                                 >
                                     <SelectTrigger className="w-[280px]">
                                         <SelectValue placeholder="Selecione o status" />
@@ -169,7 +163,13 @@ export default function OsDetailPage() {
                                 <label className="text-sm font-medium">Solução Técnica</label>
                                 <Textarea 
                                     value={technicalSolution}
-                                    onChange={(e) => setTechnicalSolution(e.target.value)}
+                                    onChange={(e) => {
+                                        const newSolution = e.target.value;
+                                        setTechnicalSolution(newSolution);
+                                        if (newSolution && role === 'laboratorio' && currentStatus !== 'pronta_entrega' && currentStatus !== 'entregue') {
+                                            setCurrentStatus('pronta_entrega');
+                                        }
+                                    }}
                                     rows={6}
                                     placeholder="Descreva a solução técnica aplicada. Preencher este campo mudará o status para 'Pronta para Entrega'."
                                     disabled={isUpdating}
