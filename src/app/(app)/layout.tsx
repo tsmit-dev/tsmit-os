@@ -1,11 +1,10 @@
 "use client";
-import React from 'react';
-import { Sidebar, SidebarProvider } from '@/components/ui/sidebar';
-import { SidebarNav } from '@/components/sidebar-nav';
+import React, { useEffect } from 'react';
+import { SidebarProvider } from '@/components/ui/sidebar';
 import { useAuth } from '@/components/auth-provider';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
+import AppLayoutContent from './_app-layout-content'; // Importar o novo componente
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { role } = useAuth();
@@ -33,17 +32,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
-        <div className="flex h-screen w-full bg-background">
-            <Sidebar>
-                <SidebarNav />
-            </Sidebar>
-            <main className="flex-1 overflow-y-auto">
-                <div className="p-4 sm:p-6 lg:p-8">
-                  {children}
-                </div>
-            </main>
-        </div>
+    <SidebarProvider> {/* O SidebarProvider deve envolver o componente que usa useSidebar */}
+        <AppLayoutContent>{children}</AppLayoutContent>
     </SidebarProvider>
   );
 }

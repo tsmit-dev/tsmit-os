@@ -13,6 +13,7 @@ export type Client = {
   name: string;
   cnpj?: string;
   address?: string;
+  path?: string;
 };
 
 export type ServiceOrderStatus =
@@ -32,6 +33,7 @@ export type LogEntry = {
 
 export type ServiceOrder = {
   id: string;
+  orderNumber: string; // <-- Novo campo adicionado
   clientId: string;
   collaborator: {
     name: string;

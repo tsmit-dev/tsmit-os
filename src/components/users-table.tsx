@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { User, UserRole } from "@/lib/types";
-import { addUser, updateUser, deleteUser, UserData } from "@/lib/data";
+import { registerUser, updateUser, deleteUser, UserData } from "@/lib/data"; // Import registerUser
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -81,25 +81,26 @@ export function UsersTable({ users, onUserChange }: UsersTableProps) {
         email: values.email,
         role: values.role as UserRole,
       };
-      if (values.password && values.password.trim() !== '') {
-        userData.password = values.password;
-      }
+      // Note: password is not directly part of UserData for Firestore, it's for Auth
 
       if (editingUser) {
+        // Update only profile data, password changes are handled separately via Auth methods if needed
         await updateUser(editingUser.id, userData);
         toast({ title: "Sucesso", description: "Usuário atualizado." });
       } else {
-        if (!userData.password) {
+        if (!values.password || values.password.trim() === '') {
             form.setError("password", { message: "Senha é obrigatória para novos usuários."});
             return;
         }
-        await addUser(userData);
+        // For new users, use registerUser to create Auth user and Firestore profile
+        await registerUser(userData, values.password); // Pass userData and password to registerUser
         toast({ title: "Sucesso", description: "Usuário criado." });
       }
       setIsSheetOpen(false);
       onUserChange();
-    } catch (error) {
-      toast({ title: "Erro", description: "A operação falhou.", variant: "destructive" });
+    } catch (error: any) { // Catch and log the specific error
+      console.error("Operation failed in UsersTable onSubmit:", error);
+      toast({ title: "Erro", description: error.message || "A operação falhou.", variant: "destructive" });
     }
   };
   

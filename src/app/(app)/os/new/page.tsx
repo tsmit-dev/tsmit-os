@@ -108,9 +108,10 @@ export default function NewOsPage() {
             });
             router.push(`/os/${newOrder.id}`);
         } catch (error) {
+             console.error("Erro ao criar OS:", error);
              toast({
                 title: "Erro",
-                description: "Não foi possível criar a OS.",
+                description: `Não foi possível criar a OS: ${(error as Error).message || "Erro desconhecido"}`,
                 variant: "destructive",
             });
         }

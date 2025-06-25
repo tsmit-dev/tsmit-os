@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -18,6 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import * as Collapsible from "@radix-ui/react-collapsible"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -206,7 +207,9 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
-            <div className="flex h-full w-full flex-col">{children}</div>
+            {/* Adicionado SheetTitle para acessibilidade */}
+            <SheetTitle className="sr-only">Menu de Navegação</SheetTitle>
+            <div className="flex h-full w-full flex-col overflow-y-auto">{children}</div> {/* Mantido overflow-y-auto aqui */}
           </SheetContent>
         </Sheet>
       )
@@ -398,34 +401,31 @@ SidebarSeparator.displayName = "SidebarSeparator"
 const SidebarContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
->(({ className, ...props }, ref) => {
-  return (
-    <div
-      ref={ref}
-      data-sidebar="content"
-      className={cn(
-        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
-        className
-      )}
-      {...props}
-    />
-  )
-})
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    data-sidebar="content"
+    // Removido overflow-auto daqui. A rolagem será gerenciada pelo div pai no SheetContent.
+    className={cn(
+      "flex min-h-0 flex-1 flex-col gap-2 group-data-[collapsible=icon]:overflow-hidden",
+      className
+    )}
+    {...props}
+  />
+))
 SidebarContent.displayName = "SidebarContent"
 
 const SidebarGroup = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
->(({ className, ...props }, ref) => {
-  return (
-    <div
-      ref={ref}
-      data-sidebar="group"
-      className={cn("relative flex w-full min-w-0 flex-col p-2", className)}
-      {...props}
-    />
-  )
-})
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    data-sidebar="group"
+    className={cn("relative flex w-full min-w-0 flex-col p-2", className)}
+    {...props}
+  />
+))
 SidebarGroup.displayName = "SidebarGroup"
 
 const SidebarGroupLabel = React.forwardRef<
@@ -451,7 +451,9 @@ SidebarGroupLabel.displayName = "SidebarGroupLabel"
 
 const SidebarGroupAction = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<"button"> & { asChild?: boolean }
+  React.ComponentProps<"button"> & {
+    asChild?: boolean
+  }
 >(({ className, asChild = false, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
 
@@ -735,6 +737,10 @@ const SidebarMenuSubButton = React.forwardRef<
 })
 SidebarMenuSubButton.displayName = "SidebarMenuSubButton"
 
+const SidebarCollapsible = Collapsible.Root
+const SidebarCollapsibleButton = Collapsible.Trigger
+const SidebarCollapsibleContent = Collapsible.Content
+
 export {
   Sidebar,
   SidebarContent,
@@ -760,4 +766,8 @@ export {
   SidebarSeparator,
   SidebarTrigger,
   useSidebar,
+  // Collapsible components
+  SidebarCollapsible,
+  SidebarCollapsibleButton,
+  SidebarCollapsibleContent
 }

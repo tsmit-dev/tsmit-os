@@ -98,7 +98,7 @@ export default function OsDetailPage() {
         <div className="container mx-auto space-y-6">
             <div className="flex justify-between items-start">
                 <div>
-                    <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.id}</h1>
+                    <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.orderNumber}</h1>
                     <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")} por {order.analyst}</p>
                 </div>
                 <Link href={`/os/${order.id}/label`} passHref>

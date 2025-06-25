@@ -64,7 +64,7 @@ export function OsTable({ orders, title }: OsTableProps) {
               {paginatedOrders.length > 0 ? (
                 paginatedOrders.map((order) => (
                   <TableRow key={order.id} className="cursor-pointer" onClick={() => router.push(`/os/${order.id}`)}>
-                    <TableCell className="font-medium">{order.id}</TableCell>
+                    <TableCell className="font-medium">{order.orderNumber}</TableCell>
                     <TableCell>{order.clientName}</TableCell>
                     <TableCell>{order.equipment.brand} {order.equipment.model}</TableCell>
                     <TableCell className="hidden md:table-cell">{new Date(order.createdAt).toLocaleDateString()}</TableCell>

@@ -10,21 +10,36 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarSeparator,
+  SidebarCollapsible,
+  SidebarCollapsibleButton,
+  SidebarCollapsibleContent,
+  useSidebar // Importar useSidebar aqui
 } from './ui/sidebar';
-import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, LineChart } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, LineChart, Settings, Scan } from 'lucide-react'; // Importar Scan
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Badge } from './ui/badge';
 import { TsmitIcon } from './tsmit-icon';
+import { Button } from './ui/button'; // Importar Button
+import QrScanner from './qr-scanner'; // Importar QrScanner como default export
 
 export function SidebarNav() {
   const { role, logout, user } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const { isMobile, openMobile, toggleSidebar } = useSidebar(); // Usar useSidebar
 
   const handleLogout = () => {
     logout();
     router.push('/');
+  };
+
+  const [isQrScannerOpen, setIsQrScannerOpen] = React.useState(false); // Estado para o QR Scanner
+
+  const handleScanSuccess = (decodedText: string) => {
+    console.log("QR Code scanned successfully:", decodedText);
+    router.push(`/os/${decodedText}`);
+    setIsQrScannerOpen(false);
   };
 
   const navItems = [
@@ -33,7 +48,6 @@ export function SidebarNav() {
     { href: '/os/new', label: 'Nova OS', icon: PlusCircle, roles: ['suporte', 'admin'] },
     { href: '/os', label: 'Todas as OS', icon: HardDrive, roles: ['admin', 'laboratorio', 'suporte'] },
     { href: '/clients', label: 'Clientes', icon: Briefcase, roles: ['suporte', 'admin'] },
-    { href: '/admin/users', label: 'Usuários', icon: Users, roles: ['admin'] },
     { href: '/admin/reports', label: 'Relatórios', icon: LineChart, roles: ['admin'] },
   ];
 
@@ -59,6 +73,33 @@ export function SidebarNav() {
                 </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
+
+          {role === 'admin' && (
+            <SidebarCollapsible defaultOpen={pathname.startsWith('/admin')}>
+              <SidebarCollapsibleButton>
+                <Settings />
+                <span>Configurações</span>
+              </SidebarCollapsibleButton>
+              <SidebarCollapsibleContent>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/admin/users'} tooltip="Gerenciamento de Usuários">
+                    <Link href="/admin/users">
+                      <Users />
+                      <span>Usuários</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/admin/settings'} tooltip="Configurações de E-mail">
+                    <Link href="/admin/settings">
+                      <Settings />
+                      <span>E-mail</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarCollapsibleContent>
+            </SidebarCollapsible>
+          )}
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
@@ -67,6 +108,24 @@ export function SidebarNav() {
             <Badge variant="outline">{role}</Badge>
         </div>
         <SidebarSeparator />
+        {/* Botão Escanear OS movido para o SidebarFooter */}
+        {isMobile && (
+          <div className="p-4 border-t">
+            <Button 
+              variant="outline" 
+              className="w-full flex items-center justify-center gap-2"
+              onClick={() => {
+                setIsQrScannerOpen(true);
+                if (isMobile && openMobile) {
+                  toggleSidebar(); 
+                }
+              }}
+            >
+              <Scan className="h-5 w-5" />
+              Escanear OS
+            </Button>
+          </div>
+        )}
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout} tooltip="Sair">
@@ -76,6 +135,13 @@ export function SidebarNav() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      {isQrScannerOpen && (
+        <QrScanner 
+          isOpen={isQrScannerOpen}
+          onClose={() => setIsQrScannerOpen(false)}
+          onScanSuccess={handleScanSuccess}
+        />
+      )}
     </>
   );
 }

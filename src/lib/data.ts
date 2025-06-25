@@ -1,271 +1,314 @@
+// @ts-nocheck
 "use client"
-import { ServiceOrder, ServiceOrderStatus, User, UserRole, Client } from "./types";
+import { ServiceOrder, ServiceOrderStatus, User, UserRole, Client, LogEntry } from "./types";
+import { db, auth } from "./firebase"; 
+import { collection, getDocs, getDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit, runTransaction, arrayUnion, setDoc, addDoc } from "firebase/firestore"; 
+import { getFunctions, httpsCallable } from "firebase/functions"; // Import Firebase Functions
 
-// Simulate API latency
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+// Initialize Firebase Functions
+const functions = getFunctions();
+
+// Callable Cloud Functions
+const createUserCloudFunction = httpsCallable(functions, "createUser");
+const deleteUserCloudFunction = httpsCallable(functions, "deleteUser");
 
 // --- USERS ---
-let users: (User & {password: string})[] = [
-    { id: 'user-1', name: 'Admin TSMIT', email: 'admin@tsmit.com.br', role: 'admin', password: 'asd' },
-    { id: 'user-2', name: 'Suporte TSMIT', email: 'suporte@tsmit.com.br', role: 'suporte', password: 'asd' },
-    { id: 'user-3', name: 'Laboratório TSMIT', email: 'laboratorio@tsmit.com.br', role: 'laboratorio', password: 'asd' },
-    { id: 'user-4', name: 'João Victor', email: 'joaovictor@tsmit.com.br', role: 'admin', password: 'asd.123' },
-];
-
-export const getUserByCredentials = async (email: string, password?: string): Promise<User | null> => {
-    await delay(200);
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-    
-    if (user) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { password, ...userWithoutPassword } = user;
-        return userWithoutPassword;
-    }
-    
-    return null;
-};
 
 export const getUsers = async (): Promise<User[]> => {
-    await delay(200);
-    return users.map(u => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { password, ...userWithoutPassword } = u;
-        return userWithoutPassword;
+    const usersCollection = collection(db, "users");
+    const q = query(usersCollection, orderBy("name", "asc"));
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => {
+        const docData = doc.data() as User & { password?: string };
+        const { password, ...userData } = docData; // Exclude password
+        return { ...userData, id: doc.id } as User;
     });
 };
 
 export const getUserById = async (id: string): Promise<User | null> => {
-    await delay(200);
-    const user = users.find(u => u.id === id);
-    if (user) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { password, ...userWithoutPassword } = user;
-        return userWithoutPassword;
+    const userDocRef = doc(db, "users", id);
+    const userSnap = await getDoc(userDocRef);
+
+    if (userSnap.exists()) {
+        const docData = userSnap.data() as User & { password?: string };
+        const { password, ...userData } = docData; // Exclude password
+        return { ...userData, id: userSnap.id } as User;
     }
+
     return null;
-}
+};
 
 export type UserData = {
     name: string;
     email: string;
     role: UserRole;
-    password?: string;
 };
 
-export const addUser = async (data: UserData): Promise<User> => {
-    await delay(300);
-    const newUser = {
-        ...data,
-        id: `user-${Date.now()}`,
-        password: data.password || 'default-password'
-    };
-    users.push(newUser);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...userWithoutPassword } = newUser;
-    return userWithoutPassword;
+// No longer directly adding user data via this client-side function.
+// The Cloud Function will handle both Auth and Firestore parts.
+// export const addUser = async (data: UserData, uid: string): Promise<User> => { ... };
+
+export const registerUser = async (data: Omit<UserData, 'password'>, password: string): Promise<User> => {
+    console.log(`[data.ts] registerUser: Attempting to create user via Cloud Function for email: ${data.email}`);
+    try {
+        const result = await createUserCloudFunction({ ...data, password });
+        const { success, message, userId } = result.data as any; // Cast to any for now
+
+        if (!success) {
+            throw new Error(message || "Failed to create user via Cloud Function.");
+        }
+
+        console.log(`[data.ts] registerUser: User created successfully via Cloud Function. UID: ${userId}`);
+        return { ...data, id: userId } as User; // Return a User object based on the new UID
+    } catch (error: any) {
+        console.error(`[data.ts] registerUser: Error calling createUser Cloud Function for email ${data.email}:`, error);
+        // Rethrow the HttpsError message or a generic error
+        throw new Error(error.message || "Ocorreu um erro desconhecido durante o registro.");
+    }
 };
 
 export const updateUser = async (id: string, data: Partial<UserData>): Promise<User | null> => {
-    await delay(300);
-    let userIndex = users.findIndex(u => u.id === id);
-    if (userIndex === -1) return null;
+    const userDocRef = doc(db, "users", id);
+    await updateDoc(userDocRef, data);
 
-    const updatedUser = { ...users[userIndex], ...data };
-     if (!data.password || data.password.trim() === '') {
-        updatedUser.password = users[userIndex].password;
+    const updatedSnap = await getDoc(userDocRef);
+    if (updatedSnap.exists()) {
+        const docData = updatedSnap.data() as User & { password?: string };
+        const { password, ...updatedUserData } = docData;
+        return { ...updatedUserData, id: updatedSnap.id } as User;
     }
-    users[userIndex] = updatedUser;
-    
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...userWithoutPassword } = updatedUser;
-    return userWithoutPassword;
+    return null;
 };
 
 export const deleteUser = async (id: string): Promise<boolean> => {
-    await delay(300);
-    const initialLength = users.length;
-    users = users.filter(u => u.id !== id);
-    return users.length < initialLength;
+    console.log(`[data.ts] deleteUser: Attempting to delete user via Cloud Function for UID: ${id}`);
+    try {
+        const result = await deleteUserCloudFunction({ uid: id });
+        const { success, message } = result.data as any; // Cast to any for now
+
+        if (!success) {
+            throw new Error(message || "Failed to delete user via Cloud Function.");
+        }
+        console.log(`[data.ts] deleteUser: User deleted successfully via Cloud Function.`);
+        return true;
+    } catch (error: any) {
+        console.error("Error calling deleteUser Cloud Function:", error);
+        throw new Error(error.message || "Não foi possível deletar o usuário.");
+    }
 };
 
 
 // --- CLIENTS ---
-let clients: Client[] = [
-    { id: 'client-1', name: 'Empresa A', cnpj: '11.111.111/0001-11', address: 'Rua das Flores, 123, São Paulo, SP' },
-    { id: 'client-2', name: 'Empresa B', cnpj: '22.222.222/0001-22', address: 'Avenida Principal, 456, Rio de Janeiro, RJ' },
-    { id: 'client-3', name: 'Pessoa Física C', cnpj: '', address: 'Beco da Saudade, 789, Belo Horizonte, MG' },
-    { id: 'client-4', name: 'Empresa D', cnpj: '44.444.444/0001-44', address: 'Praça Central, 101, Curitiba, PR' },
-];
 
 export const getClients = async (): Promise<Client[]> => {
-    await delay(200);
-    return [...clients];
+    const clientsCollection = collection(db, "clients");
+    const q = query(clientsCollection, orderBy("name", "asc"));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Client[];
 };
 
 export const getClientById = async (id: string): Promise<Client | null> => {
-    await delay(200);
-    const client = clients.find(c => c.id === id);
-    return client || null;
-}
+    const clientDocRef = doc(db, "clients", id);
+    const clientSnap = await getDoc(clientDocRef);
+    if (clientSnap.exists()) {
+        return { ...clientSnap.data(), id: clientSnap.id } as Client;
+    }
+    return null;
+};
 
 export type ClientData = Omit<Client, 'id'>;
 
 export const addClient = async (data: ClientData): Promise<Client> => {
-    await delay(300);
-    const newClient: Client = {
-        ...data,
-        id: `client-${Date.now()}`,
-    };
-    clients.push(newClient);
-    return newClient;
+    const clientsCollection = collection(db, "clients");
+    const newClientRef = await addDoc(clientsCollection, data);
+    return { ...data, id: newClientRef.id } as Client;
 };
 
 export const updateClient = async (id: string, data: Partial<ClientData>): Promise<Client | null> => {
-    await delay(300);
-    let clientIndex = clients.findIndex(c => c.id === id);
-    if (clientIndex === -1) return null;
-
-    clients[clientIndex] = { ...clients[clientIndex], ...data };
-    return clients[clientIndex];
+    const clientDocRef = doc(db, "clients", id);
+    await updateDoc(clientDocRef, data);
+    const updatedSnap = await getDoc(clientDocRef);
+    if (updatedSnap.exists()) {
+        return { ...updatedSnap.data(), id: updatedSnap.id } as Client;
+    }
+    return null;
 };
 
 export const deleteClient = async (id: string): Promise<boolean> => {
-    await delay(300);
-    const initialLength = clients.length;
-    clients = clients.filter(c => c.id !== id);
-    return clients.length < initialLength;
+    const clientDocRef = doc(db, "clients", id);
+    try {
+        await deleteDoc(clientDocRef);
+        return true;
+    } catch (error) {
+        console.error("Error deleting client:", error);
+        return false;
+    }
 };
 
 
 // --- SERVICE ORDERS ---
-let serviceOrders: ServiceOrder[] = [
-    {
-        id: 'OS-001',
-        clientId: 'client-1',
-        collaborator: { name: 'João Silva', email: 'joao.silva@empresa-a.com', phone: '11-98765-4321' },
-        equipment: { type: 'Notebook', brand: 'Dell', model: 'Latitude 7490', serialNumber: 'SN-DELL-123' },
-        reportedProblem: 'Tela não liga, mas o LED de energia acende.',
-        analyst: 'Suporte TSMIT',
-        status: 'em_analise',
-        createdAt: new Date('2023-10-01T09:00:00Z'),
-        logs: [
-            { timestamp: new Date('2023-10-01T09:00:00Z'), responsible: 'Suporte TSMIT', fromStatus: 'aberta', toStatus: 'em_analise', observation: 'Iniciando análise do equipamento.'}
-        ]
-    },
-    {
-        id: 'OS-002',
-        clientId: 'client-2',
-        collaborator: { name: 'Maria Souza', email: 'maria.souza@empresa-b.com.br', phone: '21-99999-8888' },
-        equipment: { type: 'Desktop', brand: 'HP', model: 'ProDesk 400', serialNumber: 'SN-HP-456' },
-        reportedProblem: 'Computador está muito lento e travando ao abrir programas pesados.',
-        analyst: 'Suporte TSMIT',
-        status: 'pronta_entrega',
-        technicalSolution: 'Upgrade de memória RAM de 8GB para 16GB e troca do HD por um SSD de 512GB. Sistema operacional reinstalado e otimizado.',
-        createdAt: new Date('2023-10-02T14:30:00Z'),
-        logs: [
-             { timestamp: new Date('2023-10-02T14:30:00Z'), responsible: 'Suporte TSMIT', fromStatus: 'aberta', toStatus: 'em_analise' },
-             { timestamp: new Date('2023-10-03T11:00:00Z'), responsible: 'Laboratório TSMIT', fromStatus: 'em_analise', toStatus: 'pronta_entrega', observation: 'Nota/Solução: Upgrade de memória RAM de 8GB para 16GB e troca do HD por um SSD de 512GB. Sistema operacional reinstalado e otimizado.' },
-        ]
-    },
-    {
-        id: 'OS-003',
-        clientId: 'client-3',
-        collaborator: { name: 'Cliente C', email: 'cliente.c@email.com', phone: '31-91234-5678' },
-        equipment: { type: 'Impressora', brand: 'Epson', model: 'EcoTank L3150', serialNumber: 'SN-EPS-789' },
-        reportedProblem: 'Não está puxando o papel da bandeja.',
-        analyst: 'Suporte TSMIT',
-        status: 'aguardando_peca',
-        createdAt: new Date('2023-10-04T10:00:00Z'),
-        logs: [
-            { timestamp: new Date('2023-10-04T10:00:00Z'), responsible: 'Suporte TSMIT', fromStatus: 'aberta', toStatus: 'em_analise' },
-            { timestamp: new Date('2023-10-04T16:20:00Z'), responsible: 'Laboratório TSMIT', fromStatus: 'em_analise', toStatus: 'aguardando_peca', observation: 'Necessário trocar o rolo de tração. Peça solicitada.' },
-        ]
-    },
-     {
-        id: 'OS-004',
-        clientId: 'client-4',
-        collaborator: { name: 'Carlos Pereira', email: 'carlos.pereira@empresa-d.com', phone: '41-3322-1100' },
-        equipment: { type: 'Servidor', brand: 'Lenovo', model: 'ThinkSystem SR550', serialNumber: 'SN-LNV-012' },
-        reportedProblem: 'Um dos discos da RAID 5 está apresentando falha iminente no S.M.A.R.T.',
-        analyst: 'Suporte TSMIT',
-        status: 'entregue',
-        technicalSolution: 'HD de 2TB do slot 3 substituído por um novo. Rebuild da RAID concluído com sucesso.',
-        createdAt: new Date('2023-09-25T11:00:00Z'),
-        logs: [
-             { timestamp: new Date('2023-09-25T11:00:00Z'), responsible: 'Suporte TSMIT', fromStatus: 'aberta', toStatus: 'pronta_entrega', observation: 'Nota/Solução: HD de 2TB do slot 3 substituído por um novo. Rebuild da RAID concluído com sucesso.' },
-             { timestamp: new Date('2023-09-26T14:00:00Z'), responsible: 'Suporte TSMIT', fromStatus: 'pronta_entrega', toStatus: 'entregue', observation: 'Entregue ao cliente.' }
-        ]
-    }
-];
 
 export const getServiceOrders = async (): Promise<ServiceOrder[]> => {
-    await delay(500);
-    const ordersWithClientName = serviceOrders.map(order => {
-        const client = clients.find(c => c.id === order.clientId);
+    // 1. Fetch all clients and create a map for quick lookups
+    const clients = await getClients();
+    const clientMap = new Map<string, string>();
+    clients.forEach(client => {
+        clientMap.set(client.id, client.name);
+    });
+
+    // 2. Fetch all service orders
+    const serviceOrdersCollection = collection(db, "serviceOrders");
+    const q = query(serviceOrdersCollection, orderBy("createdAt", "desc"));
+    const querySnapshot = await getDocs(q);
+
+    // 3. Map orders and efficiently look up client names from the map
+    const serviceOrdersData = querySnapshot.docs.map(doc => {
+        const order = {
+            ...doc.data(),
+            id: doc.id,
+        } as ServiceOrder;
+
         return {
             ...order,
-            clientName: client ? client.name : 'Cliente não encontrado'
+            clientName: clientMap.get(order.clientId) || 'Cliente não encontrado',
+            // Ensure createdAt and log timestamps are Date objects for consistency
+            createdAt: order.createdAt instanceof Date ? order.createdAt : (order.createdAt as any).toDate(),
+            logs: order.logs.map(log => ({
+                ...log,
+                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+            }))
         };
     });
-    return ordersWithClientName.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    return serviceOrdersData;
 };
 
 export const getServiceOrderById = async (id: string): Promise<ServiceOrder | null> => {
-    await delay(300);
-    const order = serviceOrders.find(os => os.id === id);
-    if (!order) return null;
-    
-    const client = clients.find(c => c.id === order.clientId);
-    return {
-        ...order,
-        clientName: client ? client.name : 'Cliente não encontrado'
-    };
+    const serviceOrderDocRef = doc(db, "serviceOrders", id);
+    const serviceOrderSnap = await getDoc(serviceOrderDocRef);
+
+    if (serviceOrderSnap.exists()) {
+        const orderData = serviceOrderSnap.data() as ServiceOrder;
+        const client = await getClientById(orderData.clientId);
+        
+        return {
+            ...orderData, // Spread data first
+            id: serviceOrderSnap.id,
+            clientName: client ? client.name : 'Cliente não encontrado',
+            // Ensure createdAt and log timestamps are Date objects
+            createdAt: orderData.createdAt instanceof Date ? orderData.createdAt : (orderData.createdAt as any).toDate(),
+            logs: orderData.logs.map(log => ({
+                ...log,
+                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+            }))
+        } as ServiceOrder;
+    }
+
+    return null;
 };
 
-export const addServiceOrder = async (data: Omit<ServiceOrder, 'id' | 'createdAt' | 'logs' | 'status'>) => {
-    await delay(500);
-    const newIdNumber = Math.max(...serviceOrders.map(o => parseInt(o.id.split('-')[1])), 0) + 1;
-    const newId = `OS-${String(newIdNumber).padStart(3, '0')}`;
-    const newOrder: ServiceOrder = {
+export const addServiceOrder = async (
+    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status'>
+  ): Promise<ServiceOrder> => {
+    const serviceOrdersCollection = collection(db, "serviceOrders");
+  
+    // 🚨 Executar fora da transação!
+    const lastOrderQuery = query(serviceOrdersCollection, orderBy("orderNumber", "desc"), limit(1));
+    const lastOrderSnapshot = await getDocs(lastOrderQuery);
+  
+    let nextOrderNumber = 1;
+    if (!lastOrderSnapshot.empty) {
+      const lastOrderData = lastOrderSnapshot.docs[0].data() as ServiceOrder;
+      const lastNum = parseInt(lastOrderData.orderNumber.replace('OS-', ''));
+      nextOrderNumber = lastNum + 1;
+    }
+  
+    const formattedOrderNumber = `OS-${String(nextOrderNumber).padStart(3, '0')}`;
+  
+    // Agora sim, roda a transação normalmente
+    const newOrder = await runTransaction(db, async (tx) => {
+      const newOrderData: Omit<ServiceOrder, 'id'> = {
         ...data,
-        id: newId,
+        orderNumber: formattedOrderNumber,
         status: 'aberta',
         createdAt: new Date(),
         logs: [
-            { timestamp: new Date(), responsible: data.analyst, fromStatus: 'aberta', toStatus: 'aberta', observation: 'OS criada no sistema.'}
+          {
+            timestamp: new Date(),
+            responsible: data.analyst,
+            fromStatus: 'aberta',
+            toStatus: 'aberta',
+            observation: 'OS criada no sistema.',
+          }
         ]
-    };
-    serviceOrders.unshift(newOrder);
+      };
+  
+      const newServiceOrderRef = doc(serviceOrdersCollection);
+      tx.set(newServiceOrderRef, newOrderData);
+  
+      return { ...newOrderData, id: newServiceOrderRef.id };
+    });
+  
     return newOrder;
-};
+  };
 
 export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string) => {
-    await delay(500);
-    const orderIndex = serviceOrders.findIndex(os => os.id === id);
-    if (orderIndex === -1) return null;
+    const serviceOrderDocRef = doc(db, "serviceOrders", id);
+    
+    const currentOrderSnap = await getDoc(serviceOrderDocRef);
+    if (!currentOrderSnap.exists()) return null;
 
-    const order = serviceOrders[orderIndex];
-    const oldStatus = order.status;
-    
-    order.status = newStatus;
-    if (technicalSolution !== undefined) {
-      order.technicalSolution = technicalSolution;
-    }
-    
-    order.logs.push({
+    const currentOrderData = currentOrderSnap.data() as ServiceOrder;
+    const oldStatus = currentOrderData.status;
+
+    const newLogEntry: LogEntry = {
         timestamp: new Date(),
         responsible,
         fromStatus: oldStatus,
         toStatus: newStatus,
-        observation: observation
-    });
-
-    serviceOrders[orderIndex] = order;
-    
-    // Return with client name joined
-    const client = clients.find(c => c.id === order.clientId);
-    return {
-        ...order,
-        clientName: client ? client.name : 'Cliente não encontrado'
+        observation: observation ?? undefined, 
     };
+
+    const updatePayload: any = {
+        status: newStatus,
+        logs: arrayUnion(newLogEntry) // Use arrayUnion to safely add to the array
+    };
+
+    if (technicalSolution !== undefined) {
+        updatePayload.technicalSolution = technicalSolution;
+    }
+
+    await updateDoc(serviceOrderDocRef, updatePayload);
+
+    // Fetch the updated document to return the full object with clientName
+    const updatedServiceOrderSnap = await getDoc(serviceOrderDocRef);
+    if (updatedServiceOrderSnap.exists()) {
+        const updatedOrderData = updatedServiceOrderSnap.data() as ServiceOrder;
+        const client = await getClientById(updatedOrderData.clientId);
+        return {
+            ...updatedOrderData, 
+            id: updatedServiceOrderSnap.id,
+            clientName: client ? client.name : 'Cliente não encontrado',
+            // Ensure createdAt and log timestamps are Date objects
+            createdAt: updatedOrderData.createdAt instanceof Date ? updatedOrderData.createdAt : (updatedOrderData.createdAt as any).toDate(),
+            logs: updatedOrderData.logs.map(log => ({
+                ...log,
+                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+            }))
+        } as ServiceOrder;
+    }
+
+    return null;
+};
+
+export const deleteServiceOrder = async (id: string): Promise<boolean> => {
+    const serviceOrderDocRef = doc(db, "serviceOrders", id);
+    try {
+        await deleteDoc(serviceOrderDocRef);
+        return true;
+    } catch (error) {
+        console.error("Error deleting service order:", error);
+        return false;
+    }
 };

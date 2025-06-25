@@ -31,7 +31,7 @@ export function OsLabel({ order }: OsLabelProps) {
                     </div>
                 </div>
                 <div className="text-right font-mono">
-                    <h1 className="text-2xl font-bold">{order.id}</h1>
+                    <h1 className="text-2xl font-bold">{order.orderNumber}</h1> {/* Alterado de order.id para order.orderNumber */}
                     <p className="text-xs">Entrada: {format(new Date(order.createdAt), "dd/MM/yyyy")}</p>
                 </div>
             </div>
