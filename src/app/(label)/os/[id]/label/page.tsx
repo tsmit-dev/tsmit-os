@@ -8,31 +8,49 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Printer, ArrowLeft } from "lucide-react";
 import { OsLabel } from "@/components/os-label";
+import { usePermissions } from "@/context/PermissionsContext"; // Import usePermissions
+import { useToast } from "@/hooks/use-toast"; // Import useToast
 
 export default function OsLabelPage() {
     const params = useParams();
     const id = params.id as string;
     const router = useRouter();
+    const { hasPermission, loadingPermissions } = usePermissions(); // Use usePermissions
+    const { toast } = useToast();
 
     const [order, setOrder] = useState<ServiceOrder | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loadingOrder, setLoadingOrder] = useState(true); // Renamed for clarity
 
     useEffect(() => {
-        if (id) {
-            getServiceOrderById(id).then(data => {
-                setOrder(data);
-                setLoading(false);
-            });
+        if (!loadingPermissions) {
+            // Check for 'os' permission to print labels
+            if (!hasPermission('os')) {
+                toast({
+                    title: "Acesso Negado",
+                    description: "Você não tem permissão para imprimir etiquetas de Ordens de Serviço.",
+                    variant: "destructive",
+                });
+                router.replace('/dashboard');
+                return;
+            }
+
+            if (id) {
+                setLoadingOrder(true);
+                getServiceOrderById(id).then(data => {
+                    setOrder(data);
+                    setLoadingOrder(false);
+                });
+            }
         }
-    }, [id]);
+    }, [id, hasPermission, loadingPermissions, router, toast]);
 
     const handlePrint = () => {
         window.print();
     };
 
-    if (loading) {
+    if (loadingPermissions || !hasPermission('os') || loadingOrder) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-800">
+            <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-800 p-4">
                 <Skeleton className="w-[4in] h-[2.5in]" />
                 <div className="flex gap-4 mt-8">
                     <Skeleton className="h-10 w-24" />

@@ -1,22 +1,25 @@
 "use client";
 import React, { useEffect } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import { useAuth } from '@/components/auth-provider';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
-import AppLayoutContent from './_app-layout-content'; // Importar o novo componente
+import AppLayoutContent from './_app-layout-content';
+import { usePermissions } from '@/context/PermissionsContext'; // Import usePermissions
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { role } = useAuth();
   const router = useRouter();
+  const { userPermissions, loadingPermissions } = usePermissions(); // Use usePermissions
 
   useEffect(() => {
-    if (role === null) {
+    // If permissions are done loading AND userPermissions is null (meaning no authenticated user with a role),
+    // redirect to the login page.
+    if (!loadingPermissions && userPermissions === null) {
       router.replace('/');
     }
-  }, [role, router]);
+  }, [userPermissions, loadingPermissions, router]);
 
-  if (!role) {
+  // Show a loading skeleton while permissions are being fetched or if no user permissions are available
+  if (loadingPermissions || userPermissions === null) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -32,7 +35,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider> {/* O SidebarProvider deve envolver o componente que usa useSidebar */}
+    <SidebarProvider>
         <AppLayoutContent>{children}</AppLayoutContent>
     </SidebarProvider>
   );

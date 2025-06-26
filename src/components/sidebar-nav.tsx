@@ -13,28 +13,31 @@ import {
   SidebarCollapsible,
   SidebarCollapsibleButton,
   SidebarCollapsibleContent,
-  useSidebar // Importar useSidebar aqui
+  useSidebar
 } from './ui/sidebar';
-import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, LineChart, Settings, Scan } from 'lucide-react'; // Importar Scan
+import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, LineChart, Settings, Scan, Gem } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Badge } from './ui/badge';
 import { TsmitIcon } from './tsmit-icon';
-import { Button } from './ui/button'; // Importar Button
-import QrScanner from './qr-scanner'; // Importar QrScanner como default export
+import { Button } from './ui/button';
+import QrScanner from './qr-scanner';
+import { Permissions } from '@/lib/types';
+import { usePermissions } from '@/context/PermissionsContext';
 
 export function SidebarNav() {
-  const { role, logout, user } = useAuth();
+  const { user, logout } = useAuth();
+  const { hasPermission, loadingPermissions, userRole } = usePermissions();
   const pathname = usePathname();
   const router = useRouter();
-  const { isMobile, openMobile, toggleSidebar } = useSidebar(); // Usar useSidebar
+  const { isMobile, openMobile, toggleSidebar } = useSidebar();
 
   const handleLogout = () => {
     logout();
     router.push('/');
   };
 
-  const [isQrScannerOpen, setIsQrScannerOpen] = React.useState(false); // Estado para o QR Scanner
+  const [isQrScannerOpen, setIsQrScannerOpen] = React.useState(false);
 
   const handleScanSuccess = (decodedText: string) => {
     console.log("QR Code scanned successfully:", decodedText);
@@ -42,16 +45,23 @@ export function SidebarNav() {
     setIsQrScannerOpen(false);
   };
 
-  const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'laboratorio'] },
-    { href: '/dashboard/ready-for-pickup', label: 'Prontas p/ Entrega', icon: PackageCheck, roles: ['suporte', 'admin'] },
-    { href: '/os/new', label: 'Nova OS', icon: PlusCircle, roles: ['suporte', 'admin'] },
-    { href: '/os', label: 'Todas as OS', icon: HardDrive, roles: ['admin', 'laboratorio', 'suporte'] },
-    { href: '/clients', label: 'Clientes', icon: Briefcase, roles: ['suporte', 'admin'] },
-    { href: '/admin/reports', label: 'Relatórios', icon: LineChart, roles: ['admin'] },
+  const navItems: {
+    href: string;
+    label: string;
+    icon: React.ElementType;
+    permissionKey: keyof Permissions;
+  }[] = [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permissionKey: 'dashboard' },
+    { href: '/dashboard/ready-for-pickup', label: 'Prontas p/ Entrega', icon: PackageCheck, permissionKey: 'os' },
+    { href: '/os/new', label: 'Nova OS', icon: PlusCircle, permissionKey: 'os' },
+    { href: '/os', label: 'Todas as OS', icon: HardDrive, permissionKey: 'os' },
+    { href: '/clients', label: 'Clientes', icon: Briefcase, permissionKey: 'clients' },
+    { href: '/admin/reports', label: 'Relatórios', icon: LineChart, permissionKey: 'adminReports' },
   ];
 
-  const visibleItems = navItems.filter(item => role && item.roles.includes(role));
+  const visibleItems = navItems.filter(item => hasPermission(item.permissionKey));
+
+  const canAccessAdminSettings = hasPermission('adminUsers') || hasPermission('adminSettings');
 
   return (
     <>
@@ -74,41 +84,58 @@ export function SidebarNav() {
             </SidebarMenuItem>
           ))}
 
-          {role === 'admin' && (
-            <SidebarCollapsible defaultOpen={pathname.startsWith('/admin')}>
-              <SidebarCollapsibleButton>
-                <Settings />
-                <span>Configurações</span>
-              </SidebarCollapsibleButton>
-              <SidebarCollapsibleContent>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === '/admin/users'} tooltip="Gerenciamento de Usuários">
-                    <Link href="/admin/users">
-                      <Users />
-                      <span>Usuários</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === '/admin/settings'} tooltip="Configurações de E-mail">
-                    <Link href="/admin/settings">
-                      <Settings />
-                      <span>E-mail</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarCollapsibleContent>
-            </SidebarCollapsible>
-          )}
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
         <div className='p-2 text-center group-data-[collapsible=icon]:hidden space-y-1'>
             <p className="text-sm font-semibold truncate" title={user?.email ?? ''}>{user?.name}</p>
-            <Badge variant="outline">{role}</Badge>
+            <Badge variant="outline">{userRole?.name || ''}</Badge>
         </div>
         <SidebarSeparator />
-        {/* Botão Escanear OS movido para o SidebarFooter */}
+        
+        {canAccessAdminSettings && (
+            <SidebarCollapsible defaultOpen={pathname.startsWith('/admin')}>
+              <SidebarCollapsibleButton className="flex items-center gap-2"> 
+                <Settings className="h-4 w-4" /> {/* Explicitly set size here */}
+                <span>Configurações</span>
+              </SidebarCollapsibleButton>
+              <SidebarCollapsibleContent>
+                <SidebarMenu> {/* Wrapped sub-items in SidebarMenu */}
+                  {hasPermission('adminUsers') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === '/admin/users'} tooltip="Gerenciamento de Usuários">
+                        <Link href="/admin/users">
+                          <Users />
+                          <span>Usuários</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                  {hasPermission('adminSettings') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings/roles'} tooltip="Gerenciamento de Cargos">
+                        <Link href="/admin/settings/roles">
+                          <Gem />
+                          <span>Cargos</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                  {hasPermission('adminSettings') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings'} tooltip="Configurações de E-mail">
+                        <Link href="/admin/settings">
+                          <Settings />
+                          <span>E-mail</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                </SidebarMenu>
+              </SidebarCollapsibleContent>
+            </SidebarCollapsible>
+          )}
+
         {isMobile && (
           <div className="p-4 border-t">
             <Button 
@@ -121,7 +148,7 @@ export function SidebarNav() {
                 }
               }}
             >
-              <Scan className="h-5 w-5" />
+              <Scan className="h-5 w-4" />
               Escanear OS
             </Button>
           </div>

@@ -1,45 +1,44 @@
 "use client";
 
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
-import { User, UserRole } from '@/lib/types';
-import { auth, db } from '@/lib/firebase'; // Import auth and db
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseAuthUser } from 'firebase/auth'; // Import Firebase Auth functions and User type
-import { doc, getDoc } from 'firebase/firestore'; // Import Firestore functions
+import { User } from '@/lib/types';
+import { auth, db } from '@/lib/firebase';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseAuthUser } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { getUserById } from '@/lib/data'; // Ensure getUserById is imported
+import { PermissionsProvider, usePermissions } from '@/context/PermissionsContext'; // Import PermissionsProvider
 
 interface AuthContextType {
   user: User | null;
-  role: UserRole | null;
   login: (email: string, pass: string) => Promise<boolean>;
   logout: () => void;
-  loading: boolean; // Add loading state
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true); // Initialize loading as true
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchUserRole = useCallback(async (firebaseUser: FirebaseAuthUser) => {
-    console.log("fetchUserRole: Attempting to fetch user data for UID:", firebaseUser.uid);
+  const fetchUserData = useCallback(async (firebaseUser: FirebaseAuthUser) => {
+    console.log("fetchUserData: Attempting to fetch user data for UID:", firebaseUser.uid);
     try {
-      const userDocRef = doc(db, "users", firebaseUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
+      const fetchedUser = await getUserById(firebaseUser.uid); // This already fetches role
 
-      if (userDocSnap.exists()) {
-        const userData = userDocSnap.data() as Omit<User, 'id'>;
-        console.log("fetchUserRole: User data found:", userData);
-        setUser({ ...userData, id: firebaseUser.uid });
+      if (fetchedUser) {
+        console.log("fetchUserData: User data found:", fetchedUser);
+        setUser(fetchedUser);
       } else {
-        console.warn("fetchUserRole: User data NOT found in Firestore for UID:", firebaseUser.uid, ". Logging out.");
+        console.warn("fetchUserData: User data NOT found in Firestore for UID:", firebaseUser.uid, ". Logging out.");
         await signOut(auth);
         setUser(null);
       }
     } catch (error) {
-      console.error("fetchUserRole: Error fetching user role:", error);
+      console.error("fetchUserData: Error fetching user data:", error);
       setUser(null);
     } finally {
-      setLoading(false); // Set loading to false after fetching
+      setLoading(false);
     }
   }, []);
 
@@ -47,32 +46,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       console.log("onAuthStateChanged: Firebase user state changed. User:", firebaseUser);
       if (firebaseUser) {
-        // User is signed in, fetch their role from Firestore
-        fetchUserRole(firebaseUser);
+        fetchUserData(firebaseUser);
       } else {
-        // User is signed out
         console.log("onAuthStateChanged: User is signed out.");
         setUser(null);
-        setLoading(false); // Set loading to false
+        setLoading(false);
       }
     });
 
-    // Clean up subscription on unmount
     return () => unsubscribe();
-  }, [fetchUserRole]);
+  }, [fetchUserData]);
 
   const login = useCallback(async (email: string, pass: string): Promise<boolean> => {
-    setLoading(true); // Set loading to true during login
+    setLoading(true);
     console.log("Login: Attempting to sign in with email:", email);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
       console.log("Login: Successfully signed in. Firebase User UID:", userCredential.user.uid);
-      // onAuthStateChanged listener will handle setting the user state
       return true;
     } catch (error: any) {
       console.error("Login error:", error.message);
       setUser(null);
-      setLoading(false); // Set loading to false on error
+      setLoading(false);
       return false;
     }
   }, []);
@@ -81,18 +76,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     console.log("Logout: Attempting to sign out.");
     try {
       await signOut(auth);
-      // onAuthStateChanged listener will handle setting the user state to null
       console.log("Logout: Successfully signed out.");
     } catch (error) {
       console.error("Logout error:", error);
     }
   }, []);
 
-  const role = user ? user.role : null;
-
   return (
-    <AuthContext.Provider value={{ user, role, login, logout: handleLogout, loading }}>
-      {children}
+    <AuthContext.Provider value={{ user, login, logout: handleLogout, loading }}>
+      <PermissionsProvider>{children}</PermissionsProvider>
     </AuthContext.Provider>
   );
 };
@@ -102,5 +94,13 @@ export const useAuth = () => {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+  const { userPermissions, userRole, hasPermission, loadingPermissions } = usePermissions();
+
+  return {
+    ...context,
+    userPermissions, // Expose permissions from PermissionsContext
+    userRole,        // Expose user's role object
+    hasPermission,   // Expose hasPermission utility
+    loadingPermissions, // Expose loading state for permissions
+  };
 };

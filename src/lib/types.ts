@@ -1,11 +1,24 @@
-"use client"
-export type UserRole = 'admin' | 'laboratorio' | 'suporte';
+export interface Permissions {
+  dashboard: boolean;
+  clients: boolean;
+  os: boolean;
+  adminReports: boolean;
+  adminUsers: boolean;
+  adminSettings: boolean;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  permissions: Permissions;
+}
 
 export type User = {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  roleId: string;
+  role?: Role;
 };
 
 export type Client = {
@@ -33,7 +46,7 @@ export type LogEntry = {
 
 export type ServiceOrder = {
   id: string;
-  orderNumber: string; // <-- Novo campo adicionado
+  orderNumber: string;
   clientId: string;
   collaborator: {
     name: string;
@@ -47,11 +60,18 @@ export type ServiceOrder = {
     serialNumber: string;
   };
   reportedProblem: string;
-  analyst: string; // The user who created the OS
+  analyst: string;
   status: ServiceOrderStatus;
   technicalSolution?: string;
   createdAt: Date;
   logs: LogEntry[];
-  // Joined properties for easier display
   clientName?: string; 
 };
+
+export interface EmailSettings {
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecurity: 'none' | 'ssl' | 'tls' | 'starttls'; // Simplified for common options
+  senderEmail: string;
+  senderPassword?: string; // Should be handled securely on backend
+}

@@ -1,29 +1,104 @@
-// @ts-nocheck
+/**
+ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ * !! AVISO DE SEGURANÇA CRÍTICO:                                                                                 !!
+ * !! As operações de `registerUser` e `deleteUser` neste arquivo estão sendo executadas DIRETAMENTE NO FRONTEND. !!
+ * !! Esta é uma PRÁTICA EXTREMAMENTE INSEGURA para gerenciar usuários do Firebase Authentication, pois:         !!
+ * !!                                                                                                            !!
+ * !! 1. EXPOSIÇÃO DE CREDENCIAIS: A criação e exclusão de usuários com privilégios administrativos requer       !!
+ * !!    credenciais que NUNCA devem ser expostas no código do cliente. Fazer isso permite que qualquer um com   !!
+ * !!    acesso ao seu frontend (via navegador, ferramentas de desenvolvedor, etc.) execute operações admin.    !!
+ * !! 2. VULNERABILIDADE: Malfeitores podem explorar esta falha para criar ou deletar contas de usuário        !!
+ * !!    arbitrariamente, comprometendo a integridade e a segurança do seu sistema.                            !!
+ * !! 3. LIMITAÇÃO DA API: A API de cliente do Firebase Authentication não permite a exclusão de usuários        !!
+ * !!    arbitrários (apenas o usuário atualmente logado pode se auto-excluir). Para excluir outros usuários,  !!
+ * !!    É OBRIGATÓRIO USAR O FIREBASE ADMIN SDK, que DEVE rodar em um ambiente de servidor seguro (ex: Cloud Functions).
+ * !!                                                                                                            !!
+ * !! RECOMENDAÇÃO FORTEMENTE:                                                                                     !!
+ * !! Para gerenciar usuários de forma segura (criar, deletar, etc.) em um painel de administração,             !!
+ * !! É IMPRESCINDÍVEL USAR FIREBASE CLOUD FUNCTIONS (ou outro backend seguro) que utilize o Firebase Admin SDK. !!
+ * !! Considerar esta implementação apenas para PROTÓTIPOS. NÃO IMPLANTE EM PRODUÇÃO NESTA CONFIGURAÇÃO.        !!
+ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ */
 "use client"
-import { ServiceOrder, ServiceOrderStatus, User, UserRole, Client, LogEntry } from "./types";
+import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions } from "./types";
 import { db, auth } from "./firebase"; 
 import { collection, getDocs, getDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit, runTransaction, arrayUnion, setDoc, addDoc } from "firebase/firestore"; 
-import { getFunctions, httpsCallable } from "firebase/functions"; // Import Firebase Functions
+import { createUserWithEmailAndPassword, deleteUser as deleteAuthUser, sendPasswordResetEmail } from "firebase/auth"; // Import specific auth functions
 
-// Initialize Firebase Functions
-const functions = getFunctions();
 
-// Callable Cloud Functions
-const createUserCloudFunction = httpsCallable(functions, "createUser");
-const deleteUserCloudFunction = httpsCallable(functions, "deleteUser");
+// --- ROLES ---
+
+export const getRoles = async (): Promise<Role[]> => {
+    const rolesCollection = collection(db, "roles");
+    const q = query(rolesCollection, orderBy("name", "asc"));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Role[];
+};
+
+export const getRoleById = async (id: string): Promise<Role | null> => {
+    const roleDocRef = doc(db, "roles", id);
+    const roleSnap = await getDoc(roleDocRef);
+
+    if (roleSnap.exists()) {
+        return { ...roleSnap.data(), id: roleSnap.id } as Role;
+    }
+    return null;
+};
+
+export type RoleData = Omit<Role, 'id'>;
+
+export const addRole = async (data: RoleData): Promise<Role> => {
+    const rolesCollection = collection(db, "roles");
+    const newRoleRef = await addDoc(rolesCollection, data);
+    return { ...data, id: newRoleRef.id } as Role;
+};
+
+export const updateRole = async (id: string, data: Partial<RoleData>): Promise<Role | null> => {
+    const roleDocRef = doc(db, "roles", id);
+    await updateDoc(roleDocRef, data);
+    const updatedSnap = await getDoc(roleDocRef);
+    if (updatedSnap.exists()) {
+        return { ...updatedSnap.data(), id: updatedSnap.id } as Role;
+    }
+    return null;
+};
+
+export const deleteRole = async (id: string): Promise<boolean> => {
+    const roleDocRef = doc(db, "roles", id);
+    try {
+        await deleteDoc(roleDocRef);
+        return true;
+    } catch (error) {
+        console.error("Error deleting role:", error);
+        return false;
+    }
+};
 
 // --- USERS ---
 
 export const getUsers = async (): Promise<User[]> => {
     const usersCollection = collection(db, "users");
-    const q = query(usersCollection, orderBy("name", "asc"));
+    const q = query(usersCollection, orderBy("name", "asc")); 
     const querySnapshot = await getDocs(q);
     
-    return querySnapshot.docs.map(doc => {
-        const docData = doc.data() as User & { password?: string };
-        const { password, ...userData } = docData; // Exclude password
-        return { ...userData, id: doc.id } as User;
-    });
+    const users: User[] = [];
+    const rolesMap = new Map<string, Role>();
+
+    for (const docSnapshot of querySnapshot.docs) {
+        const docData = docSnapshot.data() as User & { password?: string };
+        const { password, ...userData } = docData; 
+        const user: User = { ...userData, id: docSnapshot.id };
+
+        if (user.roleId && !rolesMap.has(user.roleId)) {
+            const role = await getRoleById(user.roleId);
+            if (role) {
+                rolesMap.set(user.roleId, role);
+            }
+        }
+        user.role = rolesMap.get(user.roleId);
+        users.push(user);
+    }
+    return users;
 };
 
 export const getUserById = async (id: string): Promise<User | null> => {
@@ -32,39 +107,41 @@ export const getUserById = async (id: string): Promise<User | null> => {
 
     if (userSnap.exists()) {
         const docData = userSnap.data() as User & { password?: string };
-        const { password, ...userData } = docData; // Exclude password
-        return { ...userData, id: userSnap.id } as User;
-    }
+        const { password, ...userData } = docData; 
+        const user: User = { ...userData, id: userSnap.id };
 
+        if (user.roleId) {
+            user.role = await getRoleById(user.roleId);
+        }
+        return user;
+    }
     return null;
 };
 
 export type UserData = {
     name: string;
     email: string;
-    role: UserRole;
+    roleId: string; // Changed to roleId
 };
 
-// No longer directly adding user data via this client-side function.
-// The Cloud Function will handle both Auth and Firestore parts.
-// export const addUser = async (data: UserData, uid: string): Promise<User> => { ... };
-
 export const registerUser = async (data: Omit<UserData, 'password'>, password: string): Promise<User> => {
-    console.log(`[data.ts] registerUser: Attempting to create user via Cloud Function for email: ${data.email}`);
+    console.warn("AVISO DE SEGURANÇA: Registrando usuário diretamente no frontend. ISSO NÃO É SEGURO PARA PRODUÇÃO.");
     try {
-        const result = await createUserCloudFunction({ ...data, password });
-        const { success, message, userId } = result.data as any; // Cast to any for now
+        const userCredential = await createUserWithEmailAndPassword(auth, data.email, password);
+        const newUserUid = userCredential.user.uid;
 
-        if (!success) {
-            throw new Error(message || "Failed to create user via Cloud Function.");
-        }
+        await setDoc(doc(db, "users", newUserUid), {
+            name: data.name,
+            email: data.email,
+            roleId: data.roleId, // Changed to roleId
+            createdAt: new Date(),
+        });
 
-        console.log(`[data.ts] registerUser: User created successfully via Cloud Function. UID: ${userId}`);
-        return { ...data, id: userId } as User; // Return a User object based on the new UID
+        const role = await getRoleById(data.roleId);
+        return { ...data, id: newUserUid, role } as User;
     } catch (error: any) {
-        console.error(`[data.ts] registerUser: Error calling createUser Cloud Function for email ${data.email}:`, error);
-        // Rethrow the HttpsError message or a generic error
-        throw new Error(error.message || "Ocorreu um erro desconhecido durante o registro.");
+        console.error("Erro no registro de usuário (frontend):", error);
+        throw new Error(error.message || "Ocorreu um erro ao registrar o usuário.");
     }
 };
 
@@ -76,24 +153,28 @@ export const updateUser = async (id: string, data: Partial<UserData>): Promise<U
     if (updatedSnap.exists()) {
         const docData = updatedSnap.data() as User & { password?: string };
         const { password, ...updatedUserData } = docData;
-        return { ...updatedUserData, id: updatedSnap.id } as User;
+        const updatedUser: User = { ...updatedUserData, id: updatedSnap.id };
+
+        if (updatedUser.roleId) {
+            updatedUser.role = await getRoleById(updatedUser.roleId);
+        }
+        return updatedUser;
     }
     return null;
 };
 
 export const deleteUser = async (id: string): Promise<boolean> => {
-    console.log(`[data.ts] deleteUser: Attempting to delete user via Cloud Function for UID: ${id}`);
+    console.warn("AVISO DE SEGURANÇA: Tentando deletar usuário diretamente no frontend. ISSO NÃO É SEGURO NEM POSSÍVEL PARA USUÁRIOS ARBITRÁRIOS NA API DE CLIENTE.");
     try {
-        const result = await deleteUserCloudFunction({ uid: id });
-        const { success, message } = result.data as any; // Cast to any for now
-
-        if (!success) {
-            throw new Error(message || "Failed to delete user via Cloud Function.");
+        if (auth.currentUser && auth.currentUser.uid === id) {
+            await deleteAuthUser(auth.currentUser);
+            await deleteDoc(doc(db, "users", id)); 
+            return true;
+        } else {
+            throw new Error("A exclusão de usuários arbitrários não é permitida diretamente do frontend por segurança.");
         }
-        console.log(`[data.ts] deleteUser: User deleted successfully via Cloud Function.`);
-        return true;
     } catch (error: any) {
-        console.error("Error calling deleteUser Cloud Function:", error);
+        console.error("Erro ao deletar usuário (frontend):", error);
         throw new Error(error.message || "Não foi possível deletar o usuário.");
     }
 };
@@ -193,7 +274,7 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
         const client = await getClientById(orderData.clientId);
         
         return {
-            ...orderData, // Spread data first
+            ...orderData, 
             id: serviceOrderSnap.id,
             clientName: client ? client.name : 'Cliente não encontrado',
             // Ensure createdAt and log timestamps are Date objects
@@ -305,7 +386,7 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
 export const deleteServiceOrder = async (id: string): Promise<boolean> => {
     const serviceOrderDocRef = doc(db, "serviceOrders", id);
     try {
-        await deleteDoc(serviceOrderDocRef);
+        await deleteDoc(serviceOrderDocCRef);
         return true;
     } catch (error) {
         console.error("Error deleting service order:", error);

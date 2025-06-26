@@ -1,24 +1,33 @@
 "use client";
 
-import { useAuth } from "@/components/auth-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Settings as SettingsIcon } from "lucide-react";
 import { EmailSettingsForm } from "@/components/email-settings-form";
+import { usePermissions } from "@/context/PermissionsContext";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminSettingsPage() {
-  const { role } = useAuth();
   const router = useRouter();
+  const { hasPermission, loadingPermissions } = usePermissions();
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (role && role !== "admin") {
-      router.replace("/dashboard");
+    if (!loadingPermissions) {
+      if (!hasPermission("adminSettings")) {
+        toast({
+          title: "Acesso Negado",
+          description: "Você não tem permissão para acessar esta página.",
+          variant: "destructive",
+        });
+        router.push("/dashboard");
+      }
     }
-  }, [role, router]);
+  }, [loadingPermissions, hasPermission, router, toast]);
 
-  if (role !== "admin") {
+  if (loadingPermissions || !hasPermission("adminSettings")) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-1/3" />

@@ -16,7 +16,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { addServiceOrder, getClients } from "@/lib/data";
@@ -24,6 +23,8 @@ import { useToast } from "@/hooks/use-toast";
 import { PlusCircle } from "lucide-react";
 import { Client } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePermissions } from "@/context/PermissionsContext";
+import { useAuth } from "@/components/auth-provider"; // Re-import useAuth
 
 const formSchema = z.object({
   clientId: z.string({ required_error: "Selecione um cliente." }),
@@ -33,12 +34,13 @@ const formSchema = z.object({
   equipType: z.string().min(2, "Tipo de equipamento é obrigatório."),
   equipBrand: z.string().min(2, "Marca é obrigatória."),
   equipModel: z.string().min(1, "Modelo é obrigatório."),
-  equipSerial: z.string().min(1, "Número de série é obrigatório."),
+  equipSerial: z.string().min(1, "Número de série é obrigatória."),
   problem: z.string().min(10, "Descrição do problema deve ter no mínimo 10 caracteres."),
 });
 
 export default function NewOsPage() {
-    const { role, user } = useAuth();
+    const { hasPermission, loadingPermissions } = usePermissions(); // From PermissionsContext
+    const { user } = useAuth(); // From AuthProvider for user object
     const router = useRouter();
     const { toast } = useToast();
     const [clients, setClients] = useState<Client[]>([]);
@@ -59,28 +61,47 @@ export default function NewOsPage() {
     });
 
     useEffect(() => {
-        if (role && !['suporte', 'admin'].includes(role)) {
-            router.replace('/dashboard');
+        if (!loadingPermissions) {
+            // Check for 'os' permission to create new service orders
+            if (!hasPermission('os')) {
+                toast({
+                    title: "Acesso Negado",
+                    description: "Você não tem permissão para criar novas Ordens de Serviço.",
+                    variant: "destructive",
+                });
+                router.replace('/dashboard');
+            }
         }
-    }, [role, router]);
+    }, [loadingPermissions, hasPermission, router, toast]);
 
     useEffect(() => {
         async function fetchClients() {
-            try {
-                const clientData = await getClients();
-                setClients(clientData);
-            } catch (error) {
-                toast({ title: "Erro", description: "Não foi possível carregar os clientes.", variant: "destructive" });
-            } finally {
-                setLoadingClients(false);
+            // Only fetch clients if permissions are loaded and user has access
+            if (!loadingPermissions && hasPermission('os')) {
+                try {
+                    const clientData = await getClients();
+                    setClients(clientData);
+                } catch (error) {
+                    toast({ title: "Erro", description: "Não foi possível carregar os clientes.", variant: "destructive" });
+                } finally {
+                    setLoadingClients(false);
+                }
             }
         }
         fetchClients();
-    }, [toast]);
+    }, [loadingPermissions, hasPermission, toast]);
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         if (!user) {
             toast({ title: "Erro de autenticação", description: "Usuário não encontrado.", variant: "destructive" });
+            return;
+        }
+        if (!hasPermission('os')) { // Double check permission on submit
+             toast({
+                title: "Acesso Negado",
+                description: "Você não tem permissão para criar novas Ordens de Serviço.",
+                variant: "destructive",
+            });
             return;
         }
 
@@ -117,8 +138,9 @@ export default function NewOsPage() {
         }
     }
     
-    if (loadingClients) {
-        return <div className="space-y-4">
+    // Show skeleton while permissions or clients are loading, or if user doesn't have permission
+    if (loadingPermissions || !hasPermission('os') || loadingClients) {
+        return <div className="container mx-auto space-y-4 p-4 sm:p-6 lg:p-8">
             <Skeleton className="h-10 w-1/2" />
             <Skeleton className="h-64 w-full" />
             <Skeleton className="h-48 w-full" />
@@ -197,7 +219,7 @@ export default function NewOsPage() {
                 </CardContent>
             </Card>
           <div className="flex justify-end">
-            <Button type="submit" size="lg" disabled={form.formState.isSubmitting}>
+            <Button type="submit" size="lg" disabled={form.formState.isSubmitting || !hasPermission('os')}>
                 {form.formState.isSubmitting ? "Salvando..." : "Criar OS"}
             </Button>
           </div>

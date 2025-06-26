@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      // Allow authenticated users to read any user profile (adjust if more restrictive needed)
+      allow read: if request.auth != null;
+
+      // Allow a user to create their own profile document
+      // The document ID must be their UID, and the email in the document must match their auth email
+      allow create: if request.auth != null && request.auth.uid == userId && request.auth.token.email == request.resource.data.email;
+
+      // Allow a user to update their own profile document
+      allow update: if request.auth != null && request.auth.uid == userId;
+
+      // Allow a user to delete their own profile document
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Add other collection rules here, e.g., for 'clients', 'serviceOrders' etc.
+    // Example for other collections (adjust as needed for your app's logic):
+    match /{document=**} {
+      allow read, write: if request.auth != null; // VERY permissive, adjust for production!
+    }
+  }
+}

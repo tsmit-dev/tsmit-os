@@ -11,40 +11,75 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription, // <-- Adicionado aqui
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { usePermissions } from "@/context/PermissionsContext";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const formSchema = z.object({
-  emailService: z.string().optional(), // e.g., SendGrid, Mailgun, SMTP
-  apiKey: z.string().optional(),
+  smtpServer: z.string().min(1, "Servidor SMTP é obrigatório."),
+  smtpPort: z.preprocess(
+    (val) => Number(val),
+    z.number().int().positive("Porta SMTP deve ser um número positivo.").optional()
+  ),
+  smtpSecurity: z.enum(["none", "ssl", "tls", "ssltls", "starttls"]).optional(),
   senderEmail: z.string().email("E-mail do remetente inválido.").optional(),
-  // Add more fields as needed for specific email services, e.g., SMTP host, port, user, pass
+  smtpPassword: z.string().min(1, "Senha SMTP é obrigatória."),
 });
 
 export function EmailSettingsForm() {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const { hasPermission, loadingPermissions } = usePermissions();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      emailService: "",
-      apiKey: "",
+      smtpServer: "",
+      smtpPort: undefined,
+      smtpSecurity: "none",
       senderEmail: "",
+      smtpPassword: "",
     },
   });
 
+  const canEditSettings = hasPermission("adminSettings");
+
+  useEffect(() => {
+    // Optionally, load existing settings if the user has permission
+    if (!loadingPermissions && canEditSettings) {
+      // Simulate loading existing settings
+      // const fetchedSettings = await getEmailSettings();
+      // form.reset(fetchedSettings);
+    }
+  }, [loadingPermissions, canEditSettings, form]);
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!canEditSettings) {
+      toast({
+        title: "Acesso Negado",
+        description: "Você não tem permissão para modificar as configurações de e-mail.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
-      // Here you would typically save these settings to a secure backend or Firebase Remote Config
-      // For now, we'll just simulate success.
       console.log("Saving email settings:", values);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+      // Here you would typically send the settings to your backend
+      await new Promise(resolve => setTimeout(resolve, 1000));
       toast({
         title: "Sucesso",
         description: "Configurações de e-mail salvas (simulado).",
@@ -61,17 +96,37 @@ export function EmailSettingsForm() {
     }
   }
 
+  if (loadingPermissions) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-32" />
+      </div>
+    );
+  }
+
+  if (!canEditSettings) {
+    return (
+      <div className="flex flex-col items-center justify-center h-48 border rounded-md p-4 text-center text-muted-foreground">
+        <p className="text-lg font-semibold">Acesso Negado</p>
+        <p>Você não tem permissão para visualizar ou modificar as configurações de e-mail.</p>
+      </div>
+    );
+  }
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
-          name="emailService"
+          name="smtpServer"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Serviço de E-mail (Ex: SendGrid)</FormLabel>
+              <FormLabel>Servidor SMTP</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="SendGrid, Nodemailer, etc." />
+                <Input {...field} placeholder="smtp.example.com" disabled={isSaving || !canEditSettings} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -79,16 +134,37 @@ export function EmailSettingsForm() {
         />
         <FormField
           control={form.control}
-          name="apiKey"
+          name="smtpPort"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>API Key / Chave de Acesso</FormLabel>
+              <FormLabel>Porta SMTP</FormLabel>
               <FormControl>
-                <Input type="password" {...field} placeholder="sk-..." />
+                <Input type="number" {...field} placeholder="587" disabled={isSaving || !canEditSettings} />
               </FormControl>
-              <FormDescription>
-                Em um ambiente de produção, esta chave deve ser armazenada de forma segura (ex: variáveis de ambiente).
-              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="smtpSecurity"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Segurança</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSaving || !canEditSettings}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um tipo de segurança" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  <SelectItem value="ssl">SSL</SelectItem>
+                  <SelectItem value="tls">TLS</SelectItem>
+                  <SelectItem value="ssltls">SSL/TLS</SelectItem>
+                  <SelectItem value="starttls">STARTTLS</SelectItem>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}
@@ -100,13 +176,29 @@ export function EmailSettingsForm() {
             <FormItem>
               <FormLabel>E-mail do Remetente</FormLabel>
               <FormControl>
-                <Input type="email" {...field} placeholder="contato@suaempresa.com.br" />
+                <Input type="email" {...field} placeholder="contato@suaempresa.com.br" disabled={isSaving || !canEditSettings} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={isSaving}>
+        <FormField
+          control={form.control}
+          name="smtpPassword"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Senha SMTP</FormLabel>
+              <FormControl>
+                <Input type="password" {...field} placeholder="Sua senha SMTP" disabled={isSaving || !canEditSettings} />
+              </FormControl>
+              <FormDescription>
+                Em um ambiente de produção, a senha SMTP deve ser armazenada de forma segura (ex: variáveis de ambiente).
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit" disabled={isSaving || !canEditSettings}>
           {isSaving ? "Salvando..." : "Salvar Configurações"}
         </Button>
       </form>

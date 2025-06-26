@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ServiceOrder, ServiceOrderStatus } from "@/lib/types";
 import { getServiceOrderById, updateServiceOrder } from "@/lib/data";
-import { useAuth } from "@/components/auth-provider";
+import { useAuth } from "@/components/auth-provider"; // Keep for user object
+import { usePermissions } from "@/context/PermissionsContext"; // Import usePermissions
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
@@ -20,36 +21,58 @@ import Link from "next/link";
 export default function OsDetailPage() {
     const params = useParams();
     const id = params.id as string;
-    const { role, user } = useAuth();
+    const { user } = useAuth(); // Get user from useAuth
+    const { hasPermission, loadingPermissions } = usePermissions(); // Get permissions from usePermissions
     const { toast } = useToast();
     const router = useRouter();
 
     const [order, setOrder] = useState<ServiceOrder | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loadingOrder, setLoadingOrder] = useState(true); // Renamed to avoid conflict
     const [isUpdating, setIsUpdating] = useState(false);
 
     const [currentStatus, setCurrentStatus] = useState<ServiceOrderStatus | undefined>();
     const [technicalSolution, setTechnicalSolution] = useState('');
 
     useEffect(() => {
-        if (id) {
-            setLoading(true);
-            getServiceOrderById(id).then(data => {
-                if (data) {
-                    setOrder(data);
-                    setCurrentStatus(data.status);
-                    setTechnicalSolution(data.technicalSolution || '');
-                } else {
-                    toast({ title: "Erro", description: "Ordem de Serviço não encontrada.", variant: "destructive" });
-                    router.push('/os');
-                }
-                setLoading(false);
-            });
+        if (!loadingPermissions) {
+            if (!hasPermission('os')) {
+                toast({
+                    title: "Acesso Negado",
+                    description: "Você não tem permissão para acessar Ordens de Serviço.",
+                    variant: "destructive",
+                });
+                router.replace('/dashboard');
+                return;
+            }
+            if (id) {
+                setLoadingOrder(true);
+                getServiceOrderById(id).then(data => {
+                    if (data) {
+                        setOrder(data);
+                        setCurrentStatus(data.status);
+                        setTechnicalSolution(data.technicalSolution || '');
+                    } else {
+                        toast({ title: "Erro", description: "Ordem de Serviço não encontrada.", variant: "destructive" });
+                        router.push('/os');
+                    }
+                    setLoadingOrder(false);
+                });
+            }
         }
-    }, [id, toast, router]);
+    }, [id, toast, router, hasPermission, loadingPermissions]);
 
     const handleUpdate = async () => {
         if (!order || !currentStatus || !user) return;
+        
+        // Permission check for update action
+        if (!hasPermission('os')) {
+            toast({
+                title: "Acesso Negado",
+                description: "Você não tem permissão para atualizar esta Ordem de Serviço.",
+                variant: "destructive",
+            });
+            return;
+        }
 
         // Check for changes
         if (currentStatus === order.status && technicalSolution === (order.technicalSolution || '')) {
@@ -85,14 +108,15 @@ export default function OsDetailPage() {
         setTechnicalSolution(newSolution);
     }
     
-    if (loading) return <OsDetailSkeleton />;
+    if (loadingPermissions || !hasPermission('os') || loadingOrder) return <OsDetailSkeleton />;
 
     if (!order) return <p>Ordem de Serviço não encontrada.</p>;
 
-    const canEditSolution = role === 'laboratorio' || role === 'admin';
-    const canChangeStatus = role === 'admin' || role === 'laboratorio' || (role === 'suporte' && order.status === 'pronta_entrega');
+    // Permissions based on the new system
+    const canEditSolution = hasPermission('adminSettings') || hasPermission('os'); // Assuming 'os' permission also allows editing solution
+    const canChangeStatus = hasPermission('adminSettings') || hasPermission('os');
     const canShowUpdateCard = canEditSolution || canChangeStatus;
-    const canUploadAttachment = role === 'laboratorio' || role === 'admin';
+    const canUploadAttachment = hasPermission('adminSettings') || hasPermission('os');
 
     return (
         <div className="container mx-auto space-y-6">
@@ -140,8 +164,8 @@ export default function OsDetailPage() {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Wrench /> Atualização da OS</CardTitle>
                         <CardDescription>
-                            {role === 'suporte'
-                                ? 'Registre a entrega do equipamento ao cliente alterando o status para "Entregue".'
+                            {hasPermission('os') && !hasPermission('adminSettings')
+                                ? 'Altere o status ou adicione uma nota com a solução técnica, que será salva no histórico.'
                                 : 'Altere o status e/ou adicione uma nota com a solução técnica, que será salva no histórico.'
                             }
                         </CardDescription>
@@ -159,22 +183,17 @@ export default function OsDetailPage() {
                                         <SelectValue placeholder="Selecione o status" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {(role === 'admin' || role === 'laboratorio') && (
+                                        {/* Dynamic status options based on permissions */}
+                                        {hasPermission('adminSettings') || hasPermission('os') ? (
                                             <>
                                                 <SelectItem value="aberta">Aberta</SelectItem>
                                                 <SelectItem value="em_analise">Em Análise</SelectItem>
                                                 <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
                                                 <SelectItem value="pronta_entrega">Pronta para Entrega</SelectItem>
-                                            </>
-                                        )}
-                                        {role === 'admin' && (
-                                            <SelectItem value="entregue">Entregue</SelectItem>
-                                        )}
-                                        {role === 'suporte' && order.status === 'pronta_entrega' && (
-                                            <>
-                                                <SelectItem value="pronta_entrega" disabled>Pronta para Entrega</SelectItem>
                                                 <SelectItem value="entregue">Entregue</SelectItem>
                                             </>
+                                        ) : (
+                                            <SelectItem value={currentStatus as string} disabled>{currentStatus}</SelectItem> // Cast currentStatus to string
                                         )}
                                     </SelectContent>
                                 </Select>
@@ -188,11 +207,11 @@ export default function OsDetailPage() {
                                     onChange={(e) => handleTechnicalSolutionChange(e.target.value)}
                                     rows={6}
                                     placeholder="Descreva a solução técnica ou adicione uma nota. Este texto será salvo no histórico."
-                                    disabled={isUpdating}
+                                    disabled={isUpdating || !canEditSolution}
                                 />
                             </div>
                         )}
-                        <Button onClick={handleUpdate} disabled={isUpdating || (role === 'suporte' && currentStatus !== 'entregue')}>
+                        <Button onClick={handleUpdate} disabled={isUpdating || !canChangeStatus}>
                             {isUpdating ? 'Salvando...' : 'Salvar Alterações'}
                         </Button>
                     </CardContent>
@@ -212,8 +231,8 @@ export default function OsDetailPage() {
                     <CardContent>
                         <p className="text-sm text-muted-foreground mb-4">Anexe fotos ou documentos relevantes à OS.</p>
                         <div className="flex items-center gap-4">
-                            <Input type="file" className="max-w-xs" />
-                            <Button variant="outline">Enviar</Button>
+                            <Input type="file" className="max-w-xs" disabled={!canUploadAttachment} />
+                            <Button variant="outline" disabled={!canUploadAttachment}>Enviar</Button>
                         </div>
                          <p className="text-xs text-muted-foreground mt-2">Funcionalidade de upload de anexos em desenvolvimento.</p>
                     </CardContent>
@@ -250,7 +269,7 @@ export default function OsDetailPage() {
 
 function OsDetailSkeleton() {
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
             <Skeleton className="h-10 w-1/2" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Skeleton className="h-48 md:col-span-2" />
