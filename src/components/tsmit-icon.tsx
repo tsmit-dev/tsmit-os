@@ -1,27 +1,21 @@
 import * as React from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
+import LogoTSMIT from "@/assets/logo_TSMIT_Nova.png"
 
 export const TsmitIcon = React.forwardRef<
-  SVGSVGElement,
-  React.SVGProps<SVGSVGElement>
+  HTMLImageElement,
+  React.ImgHTMLAttributes<HTMLImageElement>
 >(({ className, ...props }, ref) => (
-  <svg
+  <Image
     ref={ref}
-    viewBox="0 0 80 80"
-    xmlns="http://www.w3.org/2000/svg"
+    src={LogoTSMIT}
+    alt="Ícone TSMIT"
     className={cn(className)}
+    width={80}
+    height={80}
     {...props}
-  >
-    <g fill="currentColor">
-      <circle cx="30" cy="10" r="7" />
-      <circle cx="10" cy="30" r="7" />
-      <circle cx="30" cy="30" r="7" />
-      <circle cx="50" cy="30" r="7" />
-      <circle cx="70" cy="30" r="7" />
-      <circle cx="30" cy="50" r="7" />
-      <circle cx="50" cy="50" r="7" />
-      <circle cx="50" cy="70" r="7" />
-    </g>
-  </svg>
+  />
 ))
+
 TsmitIcon.displayName = "TsmitIcon"
