@@ -1,7 +1,7 @@
 import * as React from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
-import LogoTSMIT from "@/assets/logo_TSMIT_Nova.png"
+import LogoTSMIT from "@/assets/tsmit-icone.png"
 
 export const TsmitIcon = React.forwardRef<
   HTMLImageElement,
