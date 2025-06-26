@@ -1,24 +1,3 @@
-/**
- * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- * !! AVISO DE SEGURANÇA CRÍTICO:                                                                                 !!
- * !! As operações de `registerUser` e `deleteUser` neste arquivo estão sendo executadas DIRETAMENTE NO FRONTEND. !!
- * !! Esta é uma PRÁTICA EXTREMAMENTE INSEGURA para gerenciar usuários do Firebase Authentication, pois:         !!
- * !!                                                                                                            !!
- * !! 1. EXPOSIÇÃO DE CREDENCIAIS: A criação e exclusão de usuários com privilégios administrativos requer       !!
- * !!    credenciais que NUNCA devem ser expostas no código do cliente. Fazer isso permite que qualquer um com   !!
- * !!    acesso ao seu frontend (via navegador, ferramentas de desenvolvedor, etc.) execute operações admin.    !!
- * !! 2. VULNERABILIDADE: Malfeitores podem explorar esta falha para criar ou deletar contas de usuário        !!
- * !!    arbitrariamente, comprometendo a integridade e a segurança do seu sistema.                            !!
- * !! 3. LIMITAÇÃO DA API: A API de cliente do Firebase Authentication não permite a exclusão de usuários        !!
- * !!    arbitrários (apenas o usuário atualmente logado pode se auto-excluir). Para excluir outros usuários,  !!
- * !!    É OBRIGATÓRIO USAR O FIREBASE ADMIN SDK, que DEVE rodar em um ambiente de servidor seguro (ex: Cloud Functions).
- * !!                                                                                                            !!
- * !! RECOMENDAÇÃO FORTEMENTE:                                                                                     !!
- * !! Para gerenciar usuários de forma segura (criar, deletar, etc.) em um painel de administração,             !!
- * !! É IMPRESCINDÍVEL USAR FIREBASE CLOUD FUNCTIONS (ou outro backend seguro) que utilize o Firebase Admin SDK. !!
- * !! Considerar esta implementação apenas para PROTÓTIPOS. NÃO IMPLANTE EM PRODUÇÃO NESTA CONFIGURAÇÃO.        !!
- * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- */
 "use client"
 import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions } from "./types";
 import { db, auth } from "./firebase"; 
@@ -95,7 +74,7 @@ export const getUsers = async (): Promise<User[]> => {
                 rolesMap.set(user.roleId, role);
             }
         }
-        user.role = rolesMap.get(user.roleId);
+        user.role = rolesMap.get(user.roleId) || null; // Fix: Ensure role is null if not found
         users.push(user);
     }
     return users;
@@ -111,7 +90,7 @@ export const getUserById = async (id: string): Promise<User | null> => {
         const user: User = { ...userData, id: userSnap.id };
 
         if (user.roleId) {
-            user.role = await getRoleById(user.roleId);
+            user.role = (await getRoleById(user.roleId)) || null; // Fix: Ensure role is null if not found
         }
         return user;
     }
@@ -138,7 +117,7 @@ export const registerUser = async (data: Omit<UserData, 'password'>, password: s
         });
 
         const role = await getRoleById(data.roleId);
-        return { ...data, id: newUserUid, role } as User;
+        return { ...data, id: newUserUid, role: role || null } as User; // Fix: Ensure role is null here too
     } catch (error: any) {
         console.error("Erro no registro de usuário (frontend):", error);
         throw new Error(error.message || "Ocorreu um erro ao registrar o usuário.");
@@ -156,7 +135,7 @@ export const updateUser = async (id: string, data: Partial<UserData>): Promise<U
         const updatedUser: User = { ...updatedUserData, id: updatedSnap.id };
 
         if (updatedUser.roleId) {
-            updatedUser.role = await getRoleById(updatedUser.roleId);
+            updatedUser.role = (await getRoleById(updatedUser.roleId)) || null; // Fix: Ensure role is null if not found
         }
         return updatedUser;
     }
@@ -258,7 +237,8 @@ export const getServiceOrders = async (): Promise<ServiceOrder[]> => {
             logs: order.logs.map(log => ({
                 ...log,
                 timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            }))
+            })),
+            attachments: order.attachments || [] // Ensure attachments is an empty array if undefined
         };
     });
     
@@ -282,7 +262,8 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
             logs: orderData.logs.map(log => ({
                 ...log,
                 timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            }))
+            })),
+            attachments: orderData.attachments || [] // Ensure attachments is an empty array if undefined
         } as ServiceOrder;
     }
 
@@ -290,7 +271,7 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
 };
 
 export const addServiceOrder = async (
-    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status'>
+    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments'>
   ): Promise<ServiceOrder> => {
     const serviceOrdersCollection = collection(db, "serviceOrders");
   
@@ -322,7 +303,8 @@ export const addServiceOrder = async (
             toStatus: 'aberta',
             observation: 'OS criada no sistema.',
           }
-        ]
+        ],
+        attachments: [] // Initialize attachments as an empty array
       };
   
       const newServiceOrderRef = doc(serviceOrdersCollection);
@@ -334,7 +316,7 @@ export const addServiceOrder = async (
     return newOrder;
   };
 
-export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string) => {
+export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string, attachments?: string[]) => {
     const serviceOrderDocRef = doc(db, "serviceOrders", id);
     
     const currentOrderSnap = await getDoc(serviceOrderDocRef);
@@ -360,6 +342,10 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
         updatePayload.technicalSolution = technicalSolution;
     }
 
+    if (attachments !== undefined) {
+        updatePayload.attachments = attachments;
+    }
+
     await updateDoc(serviceOrderDocRef, updatePayload);
 
     // Fetch the updated document to return the full object with clientName
@@ -376,7 +362,8 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
             logs: updatedOrderData.logs.map(log => ({
                 ...log,
                 timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            }))
+            })),
+            attachments: updatedOrderData.attachments || [] // Ensure attachments is an empty array if undefined
         } as ServiceOrder;
     }
 
@@ -386,7 +373,7 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
 export const deleteServiceOrder = async (id: string): Promise<boolean> => {
     const serviceOrderDocRef = doc(db, "serviceOrders", id);
     try {
-        await deleteDoc(serviceOrderDocCRef);
+        await deleteDoc(serviceOrderDocRef);
         return true;
     } catch (error) {
         console.error("Error deleting service order:", error);

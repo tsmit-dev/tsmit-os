@@ -18,7 +18,7 @@ export type User = {
   name: string;
   email: string;
   roleId: string;
-  role?: Role;
+  role: Role | null; // Changed to explicitly allow null
 };
 
 export type Client = {
@@ -66,6 +66,7 @@ export type ServiceOrder = {
   createdAt: Date;
   logs: LogEntry[];
   clientName?: string; 
+  attachments?: string[];
 };
 
 export interface EmailSettings {

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ServiceOrder, ServiceOrderStatus } from "@/lib/types";
 import { getServiceOrderById, updateServiceOrder } from "@/lib/data";
-import { useAuth } from "@/components/auth-provider"; // Keep for user object
-import { usePermissions } from "@/context/PermissionsContext"; // Import usePermissions
+import { useAuth } from "@/components/auth-provider";
+import { usePermissions } from "@/context/PermissionsContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
@@ -15,23 +15,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
-import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer } from "lucide-react";
+import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File } from "lucide-react";
 import Link from "next/link";
+import { storage } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 
 export default function OsDetailPage() {
     const params = useParams();
     const id = params.id as string;
-    const { user } = useAuth(); // Get user from useAuth
-    const { hasPermission, loadingPermissions } = usePermissions(); // Get permissions from usePermissions
+    const { user } = useAuth();
+    const { hasPermission, loadingPermissions } = usePermissions();
     const { toast } = useToast();
     const router = useRouter();
 
     const [order, setOrder] = useState<ServiceOrder | null>(null);
-    const [loadingOrder, setLoadingOrder] = useState(true); // Renamed to avoid conflict
+    const [loadingOrder, setLoadingOrder] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
-
     const [currentStatus, setCurrentStatus] = useState<ServiceOrderStatus | undefined>();
     const [technicalSolution, setTechnicalSolution] = useState('');
+
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (!loadingPermissions) {
@@ -64,7 +70,6 @@ export default function OsDetailPage() {
     const handleUpdate = async () => {
         if (!order || !currentStatus || !user) return;
         
-        // Permission check for update action
         if (!hasPermission('os')) {
             toast({
                 title: "Acesso Negado",
@@ -74,7 +79,6 @@ export default function OsDetailPage() {
             return;
         }
 
-        // Check for changes
         if (currentStatus === order.status && technicalSolution === (order.technicalSolution || '')) {
             toast({ title: "Nenhuma alteração", description: "Nenhuma alteração para salvar." });
             return;
@@ -84,9 +88,9 @@ export default function OsDetailPage() {
         try {
             const updatedOrder = await updateServiceOrder(
                 order.id, 
-                currentStatus, 
-                user.name, 
-                technicalSolution, 
+                currentStatus,
+                user.name,
+                technicalSolution,
                 technicalSolution.trim() ? `Nota/Solução: ${technicalSolution}` : undefined
             );
             
@@ -97,8 +101,12 @@ export default function OsDetailPage() {
                 console.log(`Simulating email to ${order.collaborator.email}: Your equipment is ready for pickup.`);
                 toast({ title: "Notificação", description: `Colaborador ${order.collaborator.name} seria notificado por e-mail.` });
             }
-        } catch (error) {
-            toast({ title: "Erro", description: "Falha ao atualizar a OS.", variant: "destructive" });
+        } catch (error: unknown) { // Explicitly type error as unknown
+            let errorMessage = "Falha ao atualizar a OS.";
+            if (error instanceof Error) {
+                errorMessage = `Falha ao atualizar a OS: ${error.message}`;
+            }
+            toast({ title: "Erro", description: errorMessage, variant: "destructive" });
         } finally {
             setIsUpdating(false);
         }
@@ -107,13 +115,141 @@ export default function OsDetailPage() {
     const handleTechnicalSolutionChange = (newSolution: string) => {
         setTechnicalSolution(newSolution);
     }
-    
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files && event.target.files[0]) {
+            setSelectedFile(event.target.files[0]);
+        } else {
+            setSelectedFile(null);
+        }
+    };
+
+    const handleUploadFile = async () => {
+        if (!selectedFile || !order) return;
+        if (!user) {
+            toast({ title: "Erro", description: "Usuário não autenticado.", variant: "destructive" });
+            return;
+        }
+
+        setUploading(true);
+        const filePath = `service_orders/${order.id}/attachments/${selectedFile.name}`;
+        const storageRef = ref(storage, filePath);
+        const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+
+        uploadTask.on('state_changed',
+            (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                setUploadProgress(progress);
+            },
+            (error: unknown) => { // Explicitly type error as unknown
+                console.error("Upload failed", error);
+                let errorMessage = "Falha no upload.";
+                if (error instanceof Error) {
+                    errorMessage = `Falha no upload: ${error.message}`;
+                }
+                toast({ title: "Erro", description: errorMessage, variant: "destructive" });
+                setUploading(false);
+                setUploadProgress(0);
+            },
+            async () => {
+                try {
+                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                    const updatedAttachments = [...(order.attachments || []), downloadURL];
+                    
+                    // Update Firestore document with new attachment URL
+                    const updatedOrder = await updateServiceOrder(
+                        order.id,
+                        order.status,
+                        user.name,
+                        order.technicalSolution || '',
+                        `Anexo adicionado: ${selectedFile.name}`,
+                        updatedAttachments
+                    );
+
+                    setOrder(updatedOrder);
+                    toast({ title: "Sucesso", description: "Anexo enviado com sucesso!" });
+                    setSelectedFile(null);
+                    if (fileInputRef.current) {
+                        fileInputRef.current.value = "";
+                    }
+                } catch (error: unknown) { // Explicitly type error as unknown
+                    console.error("Error getting download URL or updating OS", error);
+                    let errorMessage = "Falha ao finalizar o upload ou atualizar OS.";
+                    if (error instanceof Error) {
+                        errorMessage = `Falha ao finalizar o upload ou atualizar OS: ${error.message}`;
+                    }
+                    toast({ title: "Erro", description: errorMessage, variant: "destructive" });
+                } finally {
+                    setUploading(false);
+                    setUploadProgress(0);
+                }
+            }
+        );
+    };
+
+    const handleDeleteAttachment = async (urlToDelete: string) => {
+        if (!order || !user) return;
+        if (!hasPermission('os')) {
+            toast({
+                title: "Acesso Negado",
+                description: "Você não tem permissão para remover anexos.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        setIsUpdating(true);
+        try {
+            // Delete from Firebase Storage
+            const fileRef = ref(storage, urlToDelete);
+            await deleteObject(fileRef);
+
+            // Update Firestore document
+            const updatedAttachments = (order.attachments || []).filter(url => url !== urlToDelete);
+            const updatedOrder = await updateServiceOrder(
+                order.id,
+                order.status,
+                user.name,
+                order.technicalSolution || '',
+                `Anexo removido: ${getFileNameFromUrl(urlToDelete)}`,
+                updatedAttachments
+            );
+            setOrder(updatedOrder);
+            toast({ title: "Sucesso", description: "Anexo removido com sucesso." });
+        } catch (error: unknown) { // Explicitly type error as unknown
+            console.error("Error deleting attachment", error);
+            let errorMessage = "Falha ao remover anexo.";
+            if (error instanceof Error) {
+                errorMessage = `Falha ao remover anexo: ${error.message}`;
+            }
+            toast({ title: "Erro", description: errorMessage, variant: "destructive" });
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
+    const getFileNameFromUrl = (url: string) => {
+        try {
+            const urlObj = new URL(url);
+            const path = decodeURIComponent(urlObj.pathname);
+            // This regex tries to capture the filename after the last '/' and before '?' or end of string
+            const match = path.match(/[^/\?#]+\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|txt)$/i);
+            return match ? match[0] : "Arquivo";
+        } catch (e: unknown) { // Explicitly type e as unknown
+            console.error("Invalid URL", url, e);
+            let errorMessage = "Arquivo Desconhecido";
+            if (e instanceof Error) {
+                errorMessage = `Arquivo Desconhecido: ${e.message}`;
+            }
+            return errorMessage;
+        }
+    };
+
     if (loadingPermissions || !hasPermission('os') || loadingOrder) return <OsDetailSkeleton />;
 
     if (!order) return <p>Ordem de Serviço não encontrada.</p>;
 
-    // Permissions based on the new system
-    const canEditSolution = hasPermission('adminSettings') || hasPermission('os'); // Assuming 'os' permission also allows editing solution
+    const canEditSolution = hasPermission('adminSettings') || hasPermission('os');
     const canChangeStatus = hasPermission('adminSettings') || hasPermission('os');
     const canShowUpdateCard = canEditSolution || canChangeStatus;
     const canUploadAttachment = hasPermission('adminSettings') || hasPermission('os');
@@ -183,7 +319,6 @@ export default function OsDetailPage() {
                                         <SelectValue placeholder="Selecione o status" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {/* Dynamic status options based on permissions */}
                                         {hasPermission('adminSettings') || hasPermission('os') ? (
                                             <>
                                                 <SelectItem value="aberta">Aberta</SelectItem>
@@ -193,7 +328,7 @@ export default function OsDetailPage() {
                                                 <SelectItem value="entregue">Entregue</SelectItem>
                                             </>
                                         ) : (
-                                            <SelectItem value={currentStatus as string} disabled>{currentStatus}</SelectItem> // Cast currentStatus to string
+                                            <SelectItem value={currentStatus as string} disabled>{currentStatus}</SelectItem>
                                         )}
                                     </SelectContent>
                                 </Select>
@@ -229,12 +364,57 @@ export default function OsDetailPage() {
                 <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><FileUp /> Anexos</CardTitle></CardHeader>
                     <CardContent>
-                        <p className="text-sm text-muted-foreground mb-4">Anexe fotos ou documentos relevantes à OS.</p>
+                        <p className="text-sm text-muted-foreground mb-4">Anexe fotos ou documentos relevantes à OS (Max 5MB por arquivo).</p>
                         <div className="flex items-center gap-4">
-                            <Input type="file" className="max-w-xs" disabled={!canUploadAttachment} />
-                            <Button variant="outline" disabled={!canUploadAttachment}>Enviar</Button>
+                            <Input 
+                                type="file" 
+                                className="max-w-xs"
+                                onChange={handleFileChange}
+                                disabled={uploading || !canUploadAttachment}
+                                ref={fileInputRef}
+                            />
+                            <Button 
+                                onClick={handleUploadFile} 
+                                disabled={!selectedFile || uploading || !canUploadAttachment}
+                            >
+                                {uploading ? `Enviando (${Math.round(uploadProgress)}%)` : 'Enviar Anexo'}
+                                {uploading ? null : <Upload className="ml-2 h-4 w-4" />}
+                            </Button>
                         </div>
-                         <p className="text-xs text-muted-foreground mt-2">Funcionalidade de upload de anexos em desenvolvimento.</p>
+                        {selectedFile && !uploading && (
+                            <p className="text-sm text-muted-foreground mt-2">Arquivo selecionado: {selectedFile.name}</p>
+                        )}
+                        
+                        {(order.attachments && order.attachments.length > 0) && (
+                            <div className="mt-6">
+                                <h3 className="text-md font-semibold mb-3">Anexos Existentes:</h3>
+                                <ul className="space-y-2">
+                                    {order.attachments.map((url, index) => (
+                                        <li key={index} className="flex items-center justify-between p-2 border rounded-md">
+                                            <a 
+                                                href={url} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 hover:underline flex items-center gap-2 truncate"
+                                            >
+                                                <File className="h-4 w-4 shrink-0" />
+                                                <span className="truncate">{getFileNameFromUrl(url)}</span>
+                                            </a>
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                onClick={() => handleDeleteAttachment(url)}
+                                                disabled={isUpdating || uploading || !canUploadAttachment}
+                                                className="ml-2 shrink-0"
+                                                title="Remover anexo"
+                                            >
+                                                <X className="h-4 w-4 text-red-500" />
+                                            </Button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             )}
