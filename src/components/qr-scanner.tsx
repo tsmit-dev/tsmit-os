@@ -18,11 +18,13 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanError, isOpe
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  // Efeito para enumerar câmeras e selecionar a traseira, se disponível
+  // Efeito para enumerar câmeras (ainda útil para ter uma lista, mas facingMode é mais direto)
   useEffect(() => {
     if (isOpen && isDialogReady) {
       Html5Qrcode.getCameras().then(cameras => {
         if (cameras && cameras.length) {
+          // Embora facingMode seja preferido, ainda selecionamos um ID para o caso de fallback
+          // ou para compatibilidade com navegadores que podem não suportar facingMode diretamente
           const rearCamera = cameras.find(camera => camera.label.toLowerCase().includes('back') || camera.label.toLowerCase().includes('environment'));
           if (rearCamera) {
             setSelectedCameraId(rearCamera.id);
@@ -45,9 +47,9 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanError, isOpe
     }
   }, [isOpen, isDialogReady]);
 
-  // Efeito para gerenciar o ciclo de vida do Html5Qrcode (o scanner real)
+  // Efeito para gerenciar o ciclo de vida do Html5Qrcode
   useEffect(() => {
-    if (isOpen && isDialogReady && selectedCameraId) {
+    if (isOpen && isDialogReady) { // Não dependemos mais de selectedCameraId diretamente aqui para iniciar
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode(qrCodeRegionId);
       }
@@ -55,14 +57,16 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanError, isOpe
       const html5QrCode = html5QrCodeRef.current;
 
       if (!html5QrCode.isScanning) {
+        // Usa videoConstraints com facingMode: 'environment' para solicitar a câmera traseira
+        // selectedCameraId ainda pode ser passado como um hint ou fallback se facingMode não for suportado/preferido
         html5QrCode.start(
-          selectedCameraId, 
+          selectedCameraId || { facingMode: 'environment' }, // Passa o ID ou o objeto de constraints
           { 
             fps: 10, 
-            qrbox: { width: 250, height: 250 } 
+            qrbox: { width: 250, height: 250 },
+            videoConstraints: { facingMode: 'environment' } // FORÇA A CÂMERA TRASEIRA
           },
           (decodedText, decodedResult) => {
-            // Extrai o ID da OS da URL completa
             const osId = decodedText.split('/').pop();
             if (osId) {
               onScanSuccess(osId);
@@ -78,7 +82,8 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanError, isOpe
           }
         ).catch(err => {
           console.error("Falha ao iniciar o scanner de QR Code:", err);
-          setCameraError(`Erro ao iniciar o scanner: ${err.message || err}`);
+          // Informa ao usuário que a câmera traseira pode não estar disponível ou não foi permitida
+          setCameraError(`Erro ao iniciar o scanner (câmera traseira): ${err.message || err}. Tente novamente ou verifique as permissões.`);
         });
       }
     } else if (!isOpen && html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
@@ -93,7 +98,7 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanError, isOpe
           html5QrCodeRef.current = null;
         });
     }
-  }, [isOpen, isDialogReady, selectedCameraId, onScanSuccess, onScanError, onClose]);
+  }, [isOpen, isDialogReady, selectedCameraId, onScanSuccess, onScanError, onClose]); // selectedCameraId ainda é uma dependência, mas não bloqueia o início
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -115,9 +120,9 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanError, isOpe
           </DialogDescription>
         </DialogHeader>
         {cameraError && <p className="text-red-500 text-sm mt-2">{cameraError}</p>}
-        {isOpen && isDialogReady && selectedCameraId && <div id={qrCodeRegionId} style={{ width: "100%" }}></div>}
-        {isOpen && isDialogReady && !selectedCameraId && !cameraError && (
-          <p className="text-center text-gray-500 mt-4">Procurando câmeras...</p>
+        {isOpen && isDialogReady && <div id={qrCodeRegionId} style={{ width: "100%" }}></div>} {/* Renderiza a div do scanner sempre que o diálogo está pronto */}
+        {isOpen && isDialogReady && !cameraError && !html5QrCodeRef.current?.isScanning && (
+          <p className="text-center text-gray-500 mt-4">Iniciando câmera...</p>
         )}
       </DialogContent>
     </Dialog>
