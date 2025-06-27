@@ -83,22 +83,6 @@ export function SidebarNav() {
                 </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-		  
-          /* <SidebarMenuItem>
-            <SidebarMenuButton 
-              onClick={() => {
-                setIsQrScannerOpen(true);
-                if (isMobile && openMobile) {
-                  toggleSidebar(); 
-                }
-              }}
-              tooltip="Escanear OS"
-            >
-              <Scan />
-              <span>Escanear OS</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem> */
-
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
