@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 
 interface QrScannerProps {
@@ -12,67 +12,100 @@ interface QrScannerProps {
 }
 
 const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanError, isOpen, onClose }) => {
-  const scannerInstanceRef = useRef<Html5QrcodeScanner | null>(null);
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const qrCodeRegionId = "qr-code-reader";
-  const [isDialogReady, setIsDialogReady] = useState(false); // Novo estado para controlar a prontidão do diálogo
+  const [isDialogReady, setIsDialogReady] = useState(false);
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
-  // Efeito para gerenciar o ciclo de vida do Html5QrcodeScanner
+  // Efeito para enumerar câmeras e selecionar a traseira, se disponível
   useEffect(() => {
-    // Apenas inicializa e renderiza o scanner se o diálogo estiver aberto E seu conteúdo estiver pronto
     if (isOpen && isDialogReady) {
-      if (!scannerInstanceRef.current) {
-        scannerInstanceRef.current = new Html5QrcodeScanner(
-          qrCodeRegionId,
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          false // verbose logging (mudar para true para depuração se necessário)
-        );
+      Html5Qrcode.getCameras().then(cameras => {
+        if (cameras && cameras.length) {
+          const rearCamera = cameras.find(camera => camera.label.toLowerCase().includes('back') || camera.label.toLowerCase().includes('environment'));
+          if (rearCamera) {
+            setSelectedCameraId(rearCamera.id);
+          } else {
+            setSelectedCameraId(cameras[0].id);
+          }
+          setCameraError(null);
+        } else {
+          setCameraError("Nenhuma câmera encontrada.");
+          setSelectedCameraId(null);
+        }
+      }).catch(err => {
+        console.error("Erro ao enumerar câmeras:", err);
+        setCameraError("Não foi possível acessar as câmeras. Verifique as permissões.");
+        setSelectedCameraId(null);
+      });
+    } else {
+      setSelectedCameraId(null);
+      setCameraError(null);
+    }
+  }, [isOpen, isDialogReady]);
 
-        scannerInstanceRef.current.render(
+  // Efeito para gerenciar o ciclo de vida do Html5Qrcode (o scanner real)
+  useEffect(() => {
+    if (isOpen && isDialogReady && selectedCameraId) {
+      if (!html5QrCodeRef.current) {
+        html5QrCodeRef.current = new Html5Qrcode(qrCodeRegionId);
+      }
+
+      const html5QrCode = html5QrCodeRef.current;
+
+      if (!html5QrCode.isScanning) {
+        html5QrCode.start(
+          selectedCameraId, 
+          { 
+            fps: 10, 
+            qrbox: { width: 250, height: 250 } 
+          },
           (decodedText, decodedResult) => {
-            onScanSuccess(decodedText);
-            // Após o escaneamento bem-sucedido, fecha o diálogo. A limpeza do scanner ocorrerá no retorno do useEffect.
+            // Extrai o ID da OS da URL completa
+            const osId = decodedText.split('/').pop();
+            if (osId) {
+              onScanSuccess(osId);
+            } else {
+              onScanError?.("Não foi possível extrair o ID da OS do QR Code.");
+            }
             onClose();
           },
           (errorMessage) => {
-            // Opcional: Lidar com erros de escaneamento, mas evitar logs excessivos para tentativas contínuas.
             if (onScanError) {
               onScanError(errorMessage);
             }
           }
-        );
+        ).catch(err => {
+          console.error("Falha ao iniciar o scanner de QR Code:", err);
+          setCameraError(`Erro ao iniciar o scanner: ${err.message || err}`);
+        });
       }
+    } else if (!isOpen && html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+      html5QrCodeRef.current.stop()
+        .then(() => {
+          console.log("Html5Qrcode parado com sucesso.");
+        })
+        .catch(error => {
+          console.error("Falha ao parar Html5Qrcode", error);
+        })
+        .finally(() => {
+          html5QrCodeRef.current = null;
+        });
     }
-
-    // Função de limpeza: Executada quando `isOpen` ou `isDialogReady` muda para `false`, ou o componente é desmontado.
-    return () => {
-      if (scannerInstanceRef.current) {
-        scannerInstanceRef.current.clear()
-          .then(() => {
-            console.log("Html5QrcodeScanner parado com sucesso.");
-          })
-          .catch(error => {
-            console.error("Falha ao parar Html5QrcodeScanner", error);
-          })
-          .finally(() => {
-            scannerInstanceRef.current = null; // Sempre anula a ref para permitir nova inicialização limpa
-          });
-      }
-    };
-  }, [isOpen, isDialogReady, onScanSuccess, onScanError, onClose]); // Dependências
+  }, [isOpen, isDialogReady, selectedCameraId, onScanSuccess, onScanError, onClose]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
         className="sm:max-w-[425px]"
-        // onOpenAutoFocus é disparado *depois* que o conteúdo do diálogo está montado e pronto
         onOpenAutoFocus={(e) => {
-          // e.preventDefault(); // Opcional: previne o foco automático padrão, se houver conflito
-          setIsDialogReady(true); // Sinaliza que o conteúdo do diálogo está pronto
+          e.preventDefault();
+          setIsDialogReady(true);
         }}
-        // onCloseAutoFocus é disparado *antes* do diálogo ser totalmente fechado, permitindo a limpeza
         onCloseAutoFocus={(e) => {
-          // e.preventDefault(); // Opcional: previne o foco automático padrão, se houver conflito
-          setIsDialogReady(false); // Sinaliza que o conteúdo do diálogo está desmontando
+          e.preventDefault();
+          setIsDialogReady(false);
         }}
       >
         <DialogHeader>
@@ -81,8 +114,11 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanError, isOpe
             Posicione o QR Code dentro da área de leitura.
           </DialogDescription>
         </DialogHeader>
-        {/* Renderiza a div do scanner apenas quando o diálogo está aberto E seu conteúdo está pronto */}
-        {isOpen && isDialogReady && <div id={qrCodeRegionId} style={{ width: "100%" }}></div>}
+        {cameraError && <p className="text-red-500 text-sm mt-2">{cameraError}</p>}
+        {isOpen && isDialogReady && selectedCameraId && <div id={qrCodeRegionId} style={{ width: "100%" }}></div>}
+        {isOpen && isDialogReady && !selectedCameraId && !cameraError && (
+          <p className="text-center text-gray-500 mt-4">Procurando câmeras...</p>
+        )}
       </DialogContent>
     </Dialog>
   );
