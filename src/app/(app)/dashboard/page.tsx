@@ -52,7 +52,8 @@ export default function DashboardPage() {
         'pronta_entrega': 0,
         'entregue': 0,
     });
-    const [analystCounts, setAnalystCounts] = useState<Record<string, number>>({});
+    const [analystCreatedCounts, setAnalystCreatedCounts] = useState<Record<string, number>>({});
+    const [analystDeliveredCounts, setAnalystDeliveredCounts] = useState<Record<string, number>>({});
     const [loadingStats, setLoadingStats] = useState(true);
 
     useEffect(() => {
@@ -83,7 +84,8 @@ export default function DashboardPage() {
                 'pronta_entrega': 0,
                 'entregue': 0,
             };
-            const newAnalystCounts: Record<string, number> = {};
+            const newAnalystCreatedCounts: Record<string, number> = {};
+            const newAnalystDeliveredCounts: Record<string, number> = {};
 
             orders.forEach((order: ServiceOrder) => {
                 // Count by status
@@ -93,13 +95,24 @@ export default function DashboardPage() {
                     console.warn(`Unknown status encountered: ${order.status}`);
                 }
 
-                // Count by analyst
-                const analystName = order.analyst || 'Não Atribuído';
-                newAnalystCounts[analystName] = (newAnalystCounts[analystName] || 0) + 1;
+                // Count by analyst (creator)
+                const creatorAnalystName = order.analyst || 'Não Atribuído';
+                newAnalystCreatedCounts[creatorAnalystName] = (newAnalystCreatedCounts[creatorAnalystName] || 0) + 1;
+
+                // Count by analyst (delivered)
+                if (order.status === 'entregue' && order.logs) {
+                    // Find the last log entry that set the status to 'entregue'
+                    const lastDeliveredLog = order.logs.slice().reverse().find(log => log.toStatus === 'entregue');
+                    if (lastDeliveredLog) {
+                        const deliveredAnalystName = lastDeliveredLog.responsible || 'Não Atribuído';
+                        newAnalystDeliveredCounts[deliveredAnalystName] = (newAnalystDeliveredCounts[deliveredAnalystName] || 0) + 1;
+                    }
+                }
             });
 
             setStatusCounts(newStatusCounts);
-            setAnalystCounts(newAnalystCounts);
+            setAnalystCreatedCounts(newAnalystCreatedCounts);
+            setAnalystDeliveredCounts(newAnalystDeliveredCounts);
         } catch (error) {
             console.error("Failed to fetch dashboard stats:", error);
             toast({
@@ -136,10 +149,16 @@ export default function DashboardPage() {
         };
     });
 
-    const analystStatsArray: AnalystStats[] = Object.entries(analystCounts).map(([name, count]) => ({
+    const analystCreatedStatsArray: AnalystStats[] = Object.entries(analystCreatedCounts).map(([name, count]) => ({
         name,
         count,
     })).sort((a, b) => b.count - a.count); // Sort by count descending
+
+    const analystDeliveredStatsArray: AnalystStats[] = Object.entries(analystDeliveredCounts).map(([name, count]) => ({
+        name,
+        count,
+    })).sort((a, b) => b.count - a.count); // Sort by count descending
+
 
     return (
         <div className="flex-1 space-y-8 p-8 pt-6">
@@ -173,15 +192,33 @@ export default function DashboardPage() {
                         </CardContent>
                     </Card>
                 ))}
-                 {analystStatsArray.length > 0 && (
+                {analystCreatedStatsArray.length > 0 && (
                     <Card className="md:col-span-2 lg:col-span-3"> {/* Span full width for this card */}
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">OS por Analista</CardTitle>
+                            <CardTitle className="text-sm font-medium">OS por Analista - Criadas</CardTitle>
                             <Users className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {analystStatsArray.map((analystStat, index) => (
+                                {analystCreatedStatsArray.map((analystStat, index) => (
+                                    <div key={index} className="flex items-center justify-between p-2 border rounded-md">
+                                        <span className="text-sm font-medium">{analystStat.name}</span>
+                                        <span className="text-lg font-bold">{analystStat.count}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+                {analystDeliveredStatsArray.length > 0 && (
+                    <Card className="md:col-span-2 lg:col-span-3"> {/* Span full width for this card */}
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">OS por Analista - Entregues</CardTitle>
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {analystDeliveredStatsArray.map((analystStat, index) => (
                                     <div key={index} className="flex items-center justify-between p-2 border rounded-md">
                                         <span className="text-sm font-medium">{analystStat.name}</span>
                                         <span className="text-lg font-bold">{analystStat.count}</span>
