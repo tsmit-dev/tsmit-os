@@ -161,6 +161,12 @@ export function SidebarNav() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+	  {isQrScannerOpen && (
+	  <QrScanner
+		onClose={() => setIsQrScannerOpen(false)}
+		onScanSuccess={handleScanSuccess}
+	  />
+	)}
     </>
   );
 }
