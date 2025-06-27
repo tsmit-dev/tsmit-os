@@ -67,7 +67,7 @@ export function SidebarNav() {
     <>
       <SidebarHeader>
         <Link href="/dashboard" className="flex items-center gap-2 p-2">
-            <TsmitLogo/>
+            <TsmitLogo className="w-28 h-auto"/>
         </Link>
       </SidebarHeader>
       <SidebarContent>
