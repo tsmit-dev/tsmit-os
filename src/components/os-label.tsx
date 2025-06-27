@@ -3,7 +3,7 @@
 import { ServiceOrder } from "@/lib/types";
 import QRCode from "qrcode.react";
 import { format } from "date-fns";
-import { TsmitIcon } from "./tsmit-icon";
+import { TsmitLogo } from "./tsmit-logo";
 import { useState, useEffect } from "react";
 
 interface OsLabelProps {
@@ -24,9 +24,9 @@ export function OsLabel({ order }: OsLabelProps) {
             {/* Header */}
             <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2">
-                    <TsmitIcon className="w-10 h-10 text-black" />
+                    //<TsmitIcon className="w-10 h-10 text-black" />
                     <div>
-                        <h2 className="font-bold text-lg font-sans">TSMIT OS</h2>
+                        <TsmitLogo/>
                         <p className="text-xs font-sans">Controle de Ordens de Serviço</p>
                     </div>
                 </div>
