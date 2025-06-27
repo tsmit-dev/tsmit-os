@@ -84,6 +84,22 @@ export function SidebarNav() {
             </SidebarMenuItem>
           ))}
 
+          {/* Moved Scan OS button here */}
+          <SidebarMenuItem>
+            <SidebarMenuButton 
+              onClick={() => {
+                setIsQrScannerOpen(true);
+                if (isMobile && openMobile) {
+                  toggleSidebar(); 
+                }
+              }}
+              tooltip="Escanear OS"
+            >
+              <Scan />
+              <span>Escanear OS</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
@@ -135,24 +151,7 @@ export function SidebarNav() {
               </SidebarCollapsibleContent>
             </SidebarCollapsible>
           )}
-
-        {isMobile && (
-          <div className="p-4 border-t">
-            <Button 
-              variant="outline" 
-              className="w-full flex items-center justify-center gap-2"
-              onClick={() => {
-                setIsQrScannerOpen(true);
-                if (isMobile && openMobile) {
-                  toggleSidebar(); 
-                }
-              }}
-            >
-              <Scan className="h-5 w-4" />
-              Escanear OS
-            </Button>
-          </div>
-        )}
+      
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout} tooltip="Sair">
