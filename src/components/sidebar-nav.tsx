@@ -83,9 +83,8 @@ export function SidebarNav() {
                 </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-
-          {/* Moved Scan OS button here */}
-          <SidebarMenuItem>
+		  
+          /* <SidebarMenuItem>
             <SidebarMenuButton 
               onClick={() => {
                 setIsQrScannerOpen(true);
@@ -98,7 +97,7 @@ export function SidebarNav() {
               <Scan />
               <span>Escanear OS</span>
             </SidebarMenuButton>
-          </SidebarMenuItem>
+          </SidebarMenuItem> */
 
         </SidebarMenu>
       </SidebarContent>
@@ -108,7 +107,14 @@ export function SidebarNav() {
             <Badge variant="outline">{userRole?.name || ''}</Badge>
         </div>
         <SidebarSeparator />
-        
+		
+		{isQrScannerOpen && (
+		  <QrScanner
+			onClose={() => setIsQrScannerOpen(false)}
+			onScanSuccess={handleScanSuccess}
+		  />
+		)}
+
         {canAccessAdminSettings && (
             <SidebarCollapsible defaultOpen={pathname.startsWith('/admin')}>
               <SidebarCollapsibleButton className="flex items-center gap-2"> 
@@ -161,12 +167,6 @@ export function SidebarNav() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
-	  {isQrScannerOpen && (
-	  <QrScanner
-		onClose={() => setIsQrScannerOpen(false)}
-		onScanSuccess={handleScanSuccess}
-	  />
-	)}
     </>
   );
 }
