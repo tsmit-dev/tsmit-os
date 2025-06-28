@@ -18,6 +18,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Add nodemailer to serverComponentsExternalPackages
+  experimental: {
+    serverComponentsExternalPackages: ['nodemailer'],
+  },
 };
 
 export default nextConfig;
