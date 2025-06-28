@@ -20,7 +20,7 @@
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  */
 "use client"
-import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions } from "./types";
+import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions, UpdateServiceOrderResult } from "./types";
 import { db, auth } from "./firebase"; 
 import { collection, getDocs, getDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit, runTransaction, arrayUnion, setDoc, addDoc } from "firebase/firestore"; 
 import { createUserWithEmailAndPassword, deleteUser as deleteAuthUser, sendPasswordResetEmail } from "firebase/auth"; // Import specific auth functions
@@ -337,11 +337,11 @@ export const addServiceOrder = async (
     return newOrder;
   };
 
-export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string, attachments?: string[]) => {
+export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string, attachments?: string[]): Promise<UpdateServiceOrderResult> => {
     const serviceOrderDocRef = doc(db, "serviceOrders", id);
     
     const currentOrderSnap = await getDoc(serviceOrderDocRef);
-    if (!currentOrderSnap.exists()) return null;
+    if (!currentOrderSnap.exists()) return { updatedOrder: null, emailSent: false, emailErrorMessage: "Ordem de serviço não encontrada." };
 
     const currentOrderData = currentOrderSnap.data() as ServiceOrder;
     const oldStatus = currentOrderData.status;
@@ -375,43 +375,58 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
         const updatedOrderData = updatedServiceOrderSnap.data() as ServiceOrder;
         const client = await getClientById(updatedOrderData.clientId);
 
+        let emailSent = false;
+        let emailErrorMessage: string | undefined;
+
         // Send email notification if status is 'entregue'
         if (newStatus === 'entregue' && client) {
-            try {
-                const response = await fetch('/api/send-email', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ serviceOrder: updatedOrderData, client }),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    console.error('Failed to send email:', errorData.message);
-                } else {
-                    console.log('Email de notificação enviado com sucesso para o cliente.');
+            if (!client.email) {
+                emailErrorMessage = 'E-mail do cliente não fornecido para notificação.';
+                console.warn(emailErrorMessage);
+            } else {
+                try {
+                    const response = await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ serviceOrder: updatedOrderData, client }),
+                    });
+    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        emailErrorMessage = `Falha ao enviar e-mail: ${errorData.message || response.statusText}`;
+                        console.error(emailErrorMessage);
+                    } else {
+                        emailSent = true;
+                        console.log('Email de notificação enviado com sucesso para o cliente.');
+                    }
+                } catch (error) {
+                    emailErrorMessage = `Erro de rede ao tentar enviar e-mail: ${(error as Error).message}`;
+                    console.error(emailErrorMessage);
                 }
-            } catch (error) {
-                console.error('Error sending email notification:', error);
             }
         }
 
         return {
-            ...updatedOrderData, 
-            id: updatedServiceOrderSnap.id,
-            clientName: client ? client.name : 'Cliente não encontrado',
-            // Ensure createdAt and log timestamps are Date objects
-            createdAt: updatedOrderData.createdAt instanceof Date ? updatedOrderData.createdAt : (updatedOrderData.createdAt as any).toDate(),
-            logs: updatedOrderData.logs.map(log => ({
-                ...log,
-                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            })),
-            attachments: updatedOrderData.attachments || [] // Ensure attachments is an empty array if undefined
-        } as ServiceOrder;
+            updatedOrder: {
+                ...updatedOrderData, 
+                id: updatedServiceOrderSnap.id,
+                clientName: client ? client.name : 'Cliente não encontrado',
+                // Ensure createdAt and log timestamps are Date objects
+                createdAt: updatedOrderData.createdAt instanceof Date ? updatedOrderData.createdAt : (updatedOrderData.createdAt as any).toDate(),
+                logs: updatedOrderData.logs.map(log => ({
+                    ...log,
+                    timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+                })),
+                attachments: updatedOrderData.attachments || [] // Ensure attachments is an empty array if undefined
+            } as ServiceOrder,
+            emailSent,
+            emailErrorMessage,
+        };
     }
 
-    return null;
+    return { updatedOrder: null, emailSent: false, emailErrorMessage: "Ordem de serviço atualizada, mas não foi possível buscar os dados completos." };
 };
 
 export const deleteServiceOrder = async (id: string): Promise<boolean> => {

@@ -86,7 +86,7 @@ export default function OsDetailPage() {
         
         setIsUpdating(true);
         try {
-            const updatedOrder = await updateServiceOrder(
+            const result = await updateServiceOrder(
                 order.id, 
                 currentStatus,
                 user.name,
@@ -94,14 +94,30 @@ export default function OsDetailPage() {
                 technicalSolution.trim() ? `Nota/Solução: ${technicalSolution}` : undefined
             );
             
-            setOrder(updatedOrder);
-            toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
-            
-            if (updatedOrder?.status === 'pronta_entrega' && order.status !== 'pronta_entrega') {
-                console.log(`Simulating email to ${order.collaborator.email}: Your equipment is ready for pickup.`);
-                toast({ title: "Notificação", description: `Colaborador ${order.collaborator.name} seria notificado por e-mail.` });
+            if (result.updatedOrder) {
+                setOrder(result.updatedOrder);
+                toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
+
+                // Handle email notification result
+                if (result.updatedOrder.status === 'entregue' && currentStatus !== order.status) { // Only notify on status change to 'entregue'
+                    if (result.emailSent) {
+                        toast({ title: "Notificação de E-mail", description: "E-mail de notificação enviado ao cliente." });
+                    } else if (result.emailErrorMessage) {
+                        toast({
+                            title: "Erro no E-mail",
+                            description: `Não foi possível enviar e-mail ao cliente: ${result.emailErrorMessage}`,
+                            variant: "destructive",
+                        });
+                    }
+                }
+            } else {
+                toast({
+                    title: "Erro",
+                    description: result.emailErrorMessage || "Falha ao atualizar a OS ou buscar dados atualizados.",
+                    variant: "destructive",
+                });
             }
-        } catch (error: unknown) { // Explicitly type error as unknown
+        } catch (error: unknown) { 
             let errorMessage = "Falha ao atualizar a OS.";
             if (error instanceof Error) {
                 errorMessage = `Falha ao atualizar a OS: ${error.message}`;
@@ -141,7 +157,7 @@ export default function OsDetailPage() {
                 const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
                 setUploadProgress(progress);
             },
-            (error: unknown) => { // Explicitly type error as unknown
+            (error: unknown) => { 
                 console.error("Upload failed", error);
                 let errorMessage = "Falha no upload.";
                 if (error instanceof Error) {
@@ -157,7 +173,7 @@ export default function OsDetailPage() {
                     const updatedAttachments = [...(order.attachments || []), downloadURL];
                     
                     // Update Firestore document with new attachment URL
-                    const updatedOrder = await updateServiceOrder(
+                    const result = await updateServiceOrder(
                         order.id,
                         order.status,
                         user.name,
@@ -166,13 +182,21 @@ export default function OsDetailPage() {
                         updatedAttachments
                     );
 
-                    setOrder(updatedOrder);
-                    toast({ title: "Sucesso", description: "Anexo enviado com sucesso!" });
+                    if (result.updatedOrder) {
+                        setOrder(result.updatedOrder);
+                        toast({ title: "Sucesso", description: "Anexo enviado com sucesso!" });
+                    } else {
+                        toast({
+                            title: "Erro",
+                            description: result.emailErrorMessage || "Falha ao atualizar a OS com o anexo.",
+                            variant: "destructive",
+                        });
+                    }
                     setSelectedFile(null);
                     if (fileInputRef.current) {
                         fileInputRef.current.value = "";
                     }
-                } catch (error: unknown) { // Explicitly type error as unknown
+                } catch (error: unknown) { 
                     console.error("Error getting download URL or updating OS", error);
                     let errorMessage = "Falha ao finalizar o upload ou atualizar OS.";
                     if (error instanceof Error) {
@@ -206,7 +230,7 @@ export default function OsDetailPage() {
 
             // Update Firestore document
             const updatedAttachments = (order.attachments || []).filter(url => url !== urlToDelete);
-            const updatedOrder = await updateServiceOrder(
+            const result = await updateServiceOrder(
                 order.id,
                 order.status,
                 user.name,
@@ -214,9 +238,18 @@ export default function OsDetailPage() {
                 `Anexo removido: ${getFileNameFromUrl(urlToDelete)}`,
                 updatedAttachments
             );
-            setOrder(updatedOrder);
-            toast({ title: "Sucesso", description: "Anexo removido com sucesso." });
-        } catch (error: unknown) { // Explicitly type error as unknown
+
+            if (result.updatedOrder) {
+                setOrder(result.updatedOrder);
+                toast({ title: "Sucesso", description: "Anexo removido com sucesso." });
+            } else {
+                toast({
+                    title: "Erro",
+                    description: result.emailErrorMessage || "Falha ao remover anexo ou atualizar OS.",
+                    variant: "destructive",
+                });
+            }
+        } catch (error: unknown) { 
             console.error("Error deleting attachment", error);
             let errorMessage = "Falha ao remover anexo.";
             if (error instanceof Error) {
@@ -235,7 +268,7 @@ export default function OsDetailPage() {
             // This regex tries to capture the filename after the last '/' and before '?' or end of string
             const match = path.match(/[^/\?#]+\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|txt)$/i);
             return match ? match[0] : "Arquivo";
-        } catch (e: unknown) { // Explicitly type e as unknown
+        } catch (e: unknown) { 
             console.error("Invalid URL", url, e);
             let errorMessage = "Arquivo Desconhecido";
             if (e instanceof Error) {

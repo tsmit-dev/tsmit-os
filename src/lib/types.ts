@@ -78,3 +78,9 @@ export interface EmailSettings {
   senderEmail?: string;
   smtpPassword?: string; // Should be handled securely on backend
 }
+
+export type UpdateServiceOrderResult = {
+  updatedOrder: ServiceOrder | null;
+  emailSent?: boolean;
+  emailErrorMessage?: string;
+};
