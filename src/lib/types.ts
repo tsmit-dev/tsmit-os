@@ -25,6 +25,7 @@ export type User = {
 export type Client = {
   id: string;
   name: string;
+  email?: string; // Added email to Client interface
   cnpj?: string;
   address?: string;
   path?: string;
@@ -60,7 +61,7 @@ export type ServiceOrder = {
     model: string;
     serialNumber: string;
   };
-  reportedProblem: string;
+  reportedProblem: string; // Changed from problemDescription
   analyst: string;
   status: ServiceOrderStatus;
   technicalSolution?: string;
@@ -71,9 +72,9 @@ export type ServiceOrder = {
 };
 
 export interface EmailSettings {
-  smtpHost: string;
-  smtpPort: number;
-  smtpSecurity: 'none' | 'ssl' | 'tls' | 'starttls'; // Simplified for common options
-  senderEmail: string;
-  senderPassword?: string; // Should be handled securely on backend
+  smtpServer: string;
+  smtpPort?: number;
+  smtpSecurity?: 'none' | 'ssl' | 'tls' | 'ssltls' | 'starttls'; // Simplified for common options
+  senderEmail?: string;
+  smtpPassword?: string; // Should be handled securely on backend
 }

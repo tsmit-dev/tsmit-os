@@ -1,3 +1,24 @@
+/**
+ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ * !! AVISO DE SEGURANÇA CRÍTICO:                                                                                 !!
+ * !! As operações de `registerUser` e `deleteUser` neste arquivo estão sendo executadas DIRETAMENTE NO FRONTEND. !!
+ * !! Esta é uma PRÁTICA EXTREMAMENTE INSEGURA para gerenciar usuários do Firebase Authentication, pois:         !!
+ * !!                                                                                                            !!
+ * !! 1. EXPOSIÇÃO DE CREDENCIAIS: A criação e exclusão de usuários com privilégios administrativos requer       !!
+ * !!    credenciais que NUNCA devem ser expostas no código do cliente. Fazer isso permite que qualquer um com   !!
+ * !!    acesso ao seu frontend (via navegador, ferramentas de desenvolvedor, etc.) execute operações admin.    !!
+ * !! 2. VULNERABILIDADE: Malfeitores podem explorar esta falha para criar ou deletar contas de usuário        !!
+ * !!    arbitrariamente, comprometendo a integridade e a segurança do seu sistema.                            !!
+ * !! 3. LIMITAÇÃO DA API: A API de cliente do Firebase Authentication não permite a exclusão de usuários        !!
+ * !!    arbitrários (apenas o usuário atualmente logado pode se auto-excluir). Para excluir outros usuários,  !!
+ * !!    É OBRIGATÓRIO USAR O FIREBASE ADMIN SDK, que DEVE rodar em um ambiente de servidor seguro (ex: Cloud Functions).
+ * !!                                                                                                            !!
+ * !! RECOMENDAÇÃO FORTEMENTE:                                                                                     !!
+ * !! Para gerenciar usuários de forma segura (criar, deletar, etc.) em um painel de administração,             !!
+ * !! É IMPRESCINDÍVEL USAR FIREBASE CLOUD FUNCTIONS (ou outro backend seguro) que utilize o Firebase Admin SDK. !!
+ * !! Considerar esta implementação apenas para PROTÓTIPOS. NÃO IMPLANTE EM PRODUÇÃO NESTA CONFIGURAÇÃO.        !!
+ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ */
 "use client"
 import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions } from "./types";
 import { db, auth } from "./firebase"; 
@@ -353,6 +374,29 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
     if (updatedServiceOrderSnap.exists()) {
         const updatedOrderData = updatedServiceOrderSnap.data() as ServiceOrder;
         const client = await getClientById(updatedOrderData.clientId);
+
+        // Send email notification if status is 'entregue'
+        if (newStatus === 'entregue' && client) {
+            try {
+                const response = await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ serviceOrder: updatedOrderData, client }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Failed to send email:', errorData.message);
+                } else {
+                    console.log('Email de notificação enviado com sucesso para o cliente.');
+                }
+            } catch (error) {
+                console.error('Error sending email notification:', error);
+            }
+        }
+
         return {
             ...updatedOrderData, 
             id: updatedServiceOrderSnap.id,
