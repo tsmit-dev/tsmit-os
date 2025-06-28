@@ -24,9 +24,8 @@ export function OsLabel({ order }: OsLabelProps) {
             {/* Header */}
             <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2">
-                    //<TsmitIcon className="w-10 h-10 text-black" />
+                    <TsmitLogo className="w-10 h-10 text-black" />
                     <div>
-                        <TsmitLogo/>
                         <p className="text-xs font-sans">Controle de Ordens de Serviço</p>
                     </div>
                 </div>
