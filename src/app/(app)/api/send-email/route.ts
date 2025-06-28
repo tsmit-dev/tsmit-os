@@ -12,8 +12,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Dados da ordem de serviço ou cliente ausentes.' }, { status: 400 });
     }
 
-    if (!client.email) {
-      return NextResponse.json({ message: 'E-mail do cliente não fornecido.' }, { status: 400 });
+    // Determine the recipient email
+    const recipientEmail = client.email || serviceOrder.collaborator.email;
+
+    if (!recipientEmail) {
+      return NextResponse.json({ message: 'Nenhum e-mail de destinatário válido fornecido para o cliente ou colaborador.' }, { status: 400 });
     }
 
     // Fetch email settings from Firestore
@@ -66,7 +69,7 @@ export async function POST(request: Request) {
 
     const mailOptions = {
       from: `"TSMIT" <${SENDER_EMAIL}>`,
-      to: client.email,
+      to: recipientEmail, // Use the determined recipient email
       subject: `Atualização da Ordem de Serviço ${serviceOrder.orderNumber} - Status: Entregue`,
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">

@@ -378,34 +378,35 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
         let emailSent = false;
         let emailErrorMessage: string | undefined;
 
+        // Determine the recipient email for the frontend check
+        const recipientEmail = client?.email || updatedOrderData.collaborator.email;
+
         // Send email notification if status is 'entregue'
-        if (newStatus === 'entregue' && client) {
-            if (!client.email) {
-                emailErrorMessage = 'E-mail do cliente não fornecido para notificação.';
-                console.warn(emailErrorMessage);
-            } else {
-                try {
-                    const response = await fetch('/api/send-email', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ serviceOrder: updatedOrderData, client }),
-                    });
-    
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        emailErrorMessage = `Falha ao enviar e-mail: ${errorData.message || response.statusText}`;
-                        console.error(emailErrorMessage);
-                    } else {
-                        emailSent = true;
-                        console.log('Email de notificação enviado com sucesso para o cliente.');
-                    }
-                } catch (error) {
-                    emailErrorMessage = `Erro de rede ao tentar enviar e-mail: ${(error as Error).message}`;
+        if (newStatus === 'entregue' && recipientEmail) {
+            try {
+                const response = await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ serviceOrder: updatedOrderData, client }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    emailErrorMessage = `Falha ao enviar e-mail: ${errorData.message || response.statusText}`;
                     console.error(emailErrorMessage);
+                } else {
+                    emailSent = true;
+                    console.log('Email de notificação enviado com sucesso para o cliente.');
                 }
+            } catch (error) {
+                emailErrorMessage = `Erro de rede ao tentar enviar e-mail: ${(error as Error).message}`;
+                console.error(emailErrorMessage);
             }
+        } else if (newStatus === 'entregue' && !recipientEmail) {
+            emailErrorMessage = 'Nenhum e-mail de destinatário válido fornecido para notificação.';
+            console.warn(emailErrorMessage);
         }
 
         return {
