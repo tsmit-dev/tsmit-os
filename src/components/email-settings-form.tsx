@@ -26,6 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { db } from "@/lib/firebase"; // Import db
+import { doc, getDoc, setDoc } from "firebase/firestore"; // Import doc, getDoc, setDoc
 
 const formSchema = z.object({
   smtpServer: z.string().min(1, "Servidor SMTP é obrigatório."),
@@ -38,12 +40,15 @@ const formSchema = z.object({
   smtpPassword: z.string().min(1, "Senha SMTP é obrigatória."),
 });
 
+type EmailSettings = z.infer<typeof formSchema>;
+
 export function EmailSettingsForm() {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true); // New state for loading settings
   const { hasPermission, loadingPermissions } = usePermissions();
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<EmailSettings>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       smtpServer: "",
@@ -56,16 +61,61 @@ export function EmailSettingsForm() {
 
   const canEditSettings = hasPermission("adminSettings");
 
-  useEffect(() => {
-    // Optionally, load existing settings if the user has permission
-    if (!loadingPermissions && canEditSettings) {
-      // Simulate loading existing settings
-      // const fetchedSettings = await getEmailSettings();
-      // form.reset(fetchedSettings);
+  // Function to fetch email settings from Firestore
+  const getEmailSettings = async (): Promise<EmailSettings | null> => {
+    try {
+      const settingsDocRef = doc(db, 'settings', 'email');
+      const settingsSnap = await getDoc(settingsDocRef);
+      if (settingsSnap.exists()) {
+        return settingsSnap.data() as EmailSettings;
+      }
+      return null;
+    } catch (error) {
+      console.error("Failed to fetch email settings:", error);
+      toast({
+        title: "Erro ao carregar",
+        description: "Não foi possível carregar as configurações de e-mail.",
+        variant: "destructive",
+      });
+      return null;
     }
+  };
+
+  // Function to save email settings to Firestore
+  const saveEmailSettings = async (values: EmailSettings) => {
+    try {
+      const settingsDocRef = doc(db, 'settings', 'email');
+      await setDoc(settingsDocRef, values, { merge: true }); // Use merge: true to avoid overwriting other fields
+      toast({
+        title: "Sucesso",
+        description: "Configurações de e-mail salvas com sucesso.",
+      });
+    } catch (error) {
+      console.error("Failed to save email settings:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar as configurações de e-mail.",
+        variant: "destructive",
+      });
+      throw error; // Re-throw to be caught by onSubmit
+    }
+  };
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!loadingPermissions && canEditSettings) {
+        setIsLoadingSettings(true);
+        const fetchedSettings = await getEmailSettings();
+        if (fetchedSettings) {
+          form.reset(fetchedSettings);
+        }
+        setIsLoadingSettings(false);
+      }
+    };
+    loadSettings();
   }, [loadingPermissions, canEditSettings, form]);
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: EmailSettings) {
     if (!canEditSettings) {
       toast({
         title: "Acesso Negado",
@@ -77,26 +127,13 @@ export function EmailSettingsForm() {
 
     setIsSaving(true);
     try {
-      console.log("Saving email settings:", values);
-      // Here you would typically send the settings to your backend
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast({
-        title: "Sucesso",
-        description: "Configurações de e-mail salvas (simulado).",
-      });
-    } catch (error) {
-      console.error("Failed to save email settings:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível salvar as configurações de e-mail.",
-        variant: "destructive",
-      });
+      await saveEmailSettings(values);
     } finally {
       setIsSaving(false);
     }
   }
 
-  if (loadingPermissions) {
+  if (loadingPermissions || isLoadingSettings) { // Include isLoadingSettings in the loading state
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-full" />
