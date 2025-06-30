@@ -39,6 +39,8 @@ async function sendEmail(
       pass: smtpPassword,
     },
     tls: {
+      // It's recommended to set rejectUnauthorized to true in production
+      // if you are using a valid certificate.
       rejectUnauthorized: false
     }
   });
@@ -108,6 +110,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'E-mail de notificação enviado com sucesso.' });
   } catch (error) {
     console.error('Erro ao enviar e-mail de notificação:', error);
-    return NextResponse.json({ message: 'Erro ao enviar e-mail de notificação.', error: (error as Error).message }, { status: 500 });
+    return NextResponse.json({ 
+      message: 'Erro ao enviar e-mail de notificação.', 
+      error: (error instanceof Error) ? error.message : String(error) 
+    }, { status: 500 });
   }
 }
