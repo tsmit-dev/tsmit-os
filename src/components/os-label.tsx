@@ -20,20 +20,18 @@ export function OsLabel({ order }: OsLabelProps) {
     }, [order.id]);
 
     return (
-        <div
-            id="label-content"
-            className="w-[4in] h-[2.5in] print:w-[4in] print:h-[2.5in] p-5 border border-dashed border-gray-400 bg-white text-black font-sans flex flex-col justify-between print:border-none print:overflow-hidden print:m-0"
-        >
+        <div id="label-content" className="w-[4in] h-[2.5in] p-3 border border-dashed border-gray-400 bg-white text-black font-sans flex flex-col justify-between print:border-none">
             {/* Header */}
             <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2">
                     <TsmitIcon className="w-10 h-10 text-black" />
                     <div>
+                        <h2 className="font-bold text-lg font-sans">TSMIT OS</h2>
                         <p className="text-xs font-sans">Controle de Ordens de Serviço</p>
                     </div>
                 </div>
                 <div className="text-right font-mono">
-                    <h1 className="text-2xl font-bold">{order.orderNumber}</h1> {/* Alterado de order.id para order.orderNumber */}
+                    <h1 className="text-2xl font-bold">{order.orderNumber}</h1>
                     <p className="text-xs">Entrada: {format(new Date(order.createdAt), "dd/MM/yyyy")}</p>
                 </div>
             </div>
@@ -50,10 +48,6 @@ export function OsLabel({ order }: OsLabelProps) {
                         <p className="text-sm font-sans">{order.equipment.type} {order.equipment.brand} {order.equipment.model}</p>
                     </div>
                     <div>
-                        <p className="font-bold uppercase tracking-wider text-[10px]">N/S:</p>
-                        <p className="text-sm font-sans">{order.equipment.serialNumber}</p>
-                    </div>
-                     <div>
                         <p className="font-bold uppercase tracking-wider text-[10px]">Contato:</p>
                         <p className="text-sm font-sans">{order.collaborator.name}</p>
                     </div>
