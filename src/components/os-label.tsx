@@ -20,7 +20,10 @@ export function OsLabel({ order }: OsLabelProps) {
     }, [order.id]);
 
     return (
-        <div id="label-content" className="w-[4in] h-[2.5in] p-5 border border-dashed border-gray-400 bg-white text-black font-sans flex flex-col justify-between print:border-none">
+        <div
+            id="label-content"
+            className="w-[4in] h-[2.5in] print:w-[4in] print:h-[2.5in] p-5 border border-dashed border-gray-400 bg-white text-black font-sans flex flex-col justify-between print:border-none print:overflow-hidden print:m-0"
+        >
             {/* Header */}
             <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2">
