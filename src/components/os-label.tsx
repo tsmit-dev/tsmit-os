@@ -48,6 +48,10 @@ export function OsLabel({ order }: OsLabelProps) {
                         <p className="text-sm font-sans">{order.equipment.type} {order.equipment.brand} {order.equipment.model}</p>
                     </div>
                     <div>
+                        <p className="font-bold uppercase tracking-wider text-[10px]">N/S:</p>
+                        <p className="text-sm font-sans">{order.equipment.serialNumber}</p>
+                    </div>
+                    <div>
                         <p className="font-bold uppercase tracking-wider text-[10px]">Contato:</p>
                         <p className="text-sm font-sans">{order.collaborator.name}</p>
                     </div>
