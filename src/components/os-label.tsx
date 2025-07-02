@@ -20,12 +20,13 @@ export function OsLabel({ order }: OsLabelProps) {
     }, [order.id]);
 
     return (
-        <div id="label-content" className="w-[4in] h-[2.5in] p-4 border border-dashed border-gray-400 bg-white text-black font-sans flex flex-col justify-between print:border-none">
+        <div id="label-content" className="w-[4in] h-[2.5in] p-3 border border-dashed border-gray-400 bg-white text-black font-sans flex flex-col justify-between print:border-none">
             {/* Header */}
             <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2">
                     <TsmitIcon className="w-10 h-10 text-black" />
                     <div>
+                        <h2 className="font-bold text-lg font-sans">TSMIT OS</h2>
                         <p className="text-xs font-sans">Controle de Ordens de Serviço</p>
                     </div>
                 </div>
