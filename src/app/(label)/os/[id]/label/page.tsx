@@ -77,10 +77,16 @@ export default function OsLabelPage() {
                     #label-content-wrapper {
                         margin: 0;
                         padding: 0;
+                        /* Set exact dimensions for the label */
+                        width: 100mm; /* 10cm */
+                        height: 60mm;  /* 6cm */
+                        /* Ensure no overflow issues */
+                        overflow: hidden;
+                        box-sizing: border-box; /* Include padding and border in the element's total width and height */
                     }
                     @page {
-                        size: 4in 2.5in;
-                        margin: 0mm;
+                        size: 100mm 60mm; /* Set page size to 100mm x 60mm */
+                        margin: 0mm;      /* Remove all margins */
                     }
                 }
             `}</style>
