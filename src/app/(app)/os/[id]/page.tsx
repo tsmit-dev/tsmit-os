@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ServiceOrder, ServiceOrderStatus, ContractedServices } from "@/lib/types";
 import { getServiceOrderById, updateServiceOrder } from "@/lib/data";
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
-import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File, CheckCircle, AlertCircle } from "lucide-react";
+import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File, CheckCircle, AlertCircle, Edit } from "lucide-react";
 import Link from "next/link";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { EditOsDialog } from "@/components/edit-os-dialog"; // Import the new dialog
 
 export default function OsDetailPage() {
     const params = useParams();
@@ -38,11 +39,35 @@ export default function OsDetailPage() {
     const [currentStatus, setCurrentStatus] = useState<ServiceOrderStatus | undefined>();
     const [technicalSolution, setTechnicalSolution] = useState('');
     const [confirmedServices, setConfirmedServices] = useState<ContractedServices>({ webProtection: false, backup: false, edr: false });
+    const [isEditOsDialogOpen, setIsEditOsDialogOpen] = useState(false); // State for edit dialog
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // useCallback to memoize the fetch function, preventing unnecessary re-renders
+    const fetchServiceOrder = useCallback(async () => {
+        if (!id) return;
+        setLoadingOrder(true);
+        try {
+            const data = await getServiceOrderById(id);
+            if (data) {
+                setOrder(data);
+                setCurrentStatus(data.status);
+                setTechnicalSolution(data.technicalSolution || '');
+                setConfirmedServices(data.confirmedServices || { webProtection: false, backup: false, edr: false });
+            } else {
+                toast({ title: "Erro", description: "Ordem de Serviço não encontrada.", variant: "destructive" });
+                router.push('/os');
+            }
+        } catch (error) {
+            console.error("Failed to fetch service order", error);
+            toast({ title: "Erro", description: "Não foi possível carregar a Ordem de Serviço.", variant: "destructive" });
+        } finally {
+            setLoadingOrder(false);
+        }
+    }, [id, toast, router]);
 
     useEffect(() => {
         if (!loadingPermissions) {
@@ -55,23 +80,9 @@ export default function OsDetailPage() {
                 router.replace('/dashboard');
                 return;
             }
-            if (id) {
-                setLoadingOrder(true);
-                getServiceOrderById(id).then(data => {
-                    if (data) {
-                        setOrder(data);
-                        setCurrentStatus(data.status);
-                        setTechnicalSolution(data.technicalSolution || '');
-                        setConfirmedServices(data.confirmedServices || { webProtection: false, backup: false, edr: false });
-                    } else {
-                        toast({ title: "Erro", description: "Ordem de Serviço não encontrada.", variant: "destructive" });
-                        router.push('/os');
-                    }
-                    setLoadingOrder(false);
-                });
-            }
+            fetchServiceOrder();
         }
-    }, [id, toast, router, hasPermission, loadingPermissions]);
+    }, [loadingPermissions, hasPermission, router, fetchServiceOrder]);
 
     const handleUpdate = async () => {
         if (!order || !currentStatus || !user) return;
@@ -84,6 +95,8 @@ export default function OsDetailPage() {
             });
             return;
         }
+
+        const oldStatus = order.status; // Store old status before potential update
 
         // Validation for "Pronta para Entrega" and "Entregue" status
         const isReadyForDeliveryOrDelivered = currentStatus === 'pronta_entrega' || currentStatus === 'entregue';
@@ -122,8 +135,13 @@ export default function OsDetailPage() {
                 setOrder(result.updatedOrder);
                 toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
 
+                // Clear technicalSolution if status changed
+                if (currentStatus !== oldStatus) {
+                    setTechnicalSolution(''); // Clear the field
+                }
+
                 // Handle email notification result
-                if (result.updatedOrder.status === 'entregue' && currentStatus !== order.status) { // Only notify on status change to 'entregue'
+                if (result.updatedOrder.status === 'entregue' && currentStatus !== oldStatus) { 
                     if (result.emailSent) {
                         toast({ title: "Notificação de E-mail", description: "E-mail de notificação enviado ao cliente." });
                     } else if (result.emailErrorMessage) {
@@ -225,6 +243,7 @@ export default function OsDetailPage() {
                     console.error("Error getting download URL or updating OS", error);
                     let errorMessage = "Falha ao finalizar o upload ou atualizar OS.";
                     if (error instanceof Error) {
+                        // Corrected from e.message to error.message
                         errorMessage = `Falha ao finalizar o upload ou atualizar OS: ${error.message}`;
                     }
                     toast({ title: "Erro", description: errorMessage, variant: "destructive" });
@@ -323,6 +342,7 @@ export default function OsDetailPage() {
     const canChangeStatus = hasPermission('adminSettings') || hasPermission('os');
     const canShowUpdateCard = canEditSolution || canChangeStatus;
     const canUploadAttachment = hasPermission('adminSettings') || hasPermission('os');
+    const canEditOsDetails = hasPermission('adminSettings') || hasPermission('os'); // Permission to edit OS details
 
     const showServiceConfirmation = currentStatus === 'pronta_entrega' || currentStatus === 'entregue';
 
@@ -333,12 +353,20 @@ export default function OsDetailPage() {
                     <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.orderNumber}</h1>
                     <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")} por {order.analyst}</p>
                 </div>
-                <Link href={`/os/${order.id}/label`} passHref>
-                    <Button variant="outline">
-                        <Printer className="mr-2 h-4 w-4" />
-                        Imprimir Etiqueta
-                    </Button>
-                </Link>
+                <div className="flex gap-2">
+                    {canEditOsDetails && (
+                        <Button variant="outline" onClick={() => setIsEditOsDialogOpen(true)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Editar OS
+                        </Button>
+                    )}
+                    <Link href={`/os/${order.id}/label`} passHref>
+                        <Button variant="outline">
+                            <Printer className="mr-2 h-4 w-4" />
+                            Imprimir Etiqueta
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             {showAlertBanner && (
@@ -366,8 +394,8 @@ export default function OsDetailPage() {
                     <CardContent className="space-y-3 text-sm">
                         <div><p className="font-semibold text-muted-foreground">Empresa</p><p>{order.clientName}</p></div>
                         <div><p className="font-semibold text-muted-foreground">Contato</p><p>{order.collaborator.name}</p></div>
-                        <div><p className="font-semibold text-muted-foreground">Email Contato</p><p>{order.collaborator.email}</p></div>
-                        <div><p className="font-semibold text-muted-foreground">Telefone Contato</p><p>{order.collaborator.phone}</p></div>
+                        <div><p className="font-semibold text-muted-foreground">Email Contato</p><p>{order.collaborator.email || 'N/A'}</p></div>
+                        <div><p className="font-semibold text-muted-foreground">Telefone Contato</p><p>{order.collaborator.phone || 'N/A'}</p></div>
                     </CardContent>
                 </Card>
             </div>
@@ -592,6 +620,14 @@ export default function OsDetailPage() {
                     </ul>
                 </CardContent>
             </Card>
+            {order && (
+                <EditOsDialog 
+                    isOpen={isEditOsDialogOpen}
+                    onClose={() => setIsEditOsDialogOpen(false)}
+                    serviceOrder={order}
+                    onSaveSuccess={fetchServiceOrder}
+                />
+            )}
         </div>
     );
 }
