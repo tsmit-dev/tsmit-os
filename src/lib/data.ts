@@ -331,6 +331,12 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
     }
 
     const oldOrderData = currentOrderSnap.data() as ServiceOrder;
+
+    // Prevent modification if status is 'entregue'
+    if (oldOrderData.status === 'entregue') {
+        throw new Error("OS não pode ser modificada após o status 'Entregue'.");
+    }
+
     const changes: EditLogChange[] = [];
 
     // Helper to compare fields, including nested objects like 'collaborator' and 'equipment'
@@ -347,6 +353,8 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
     // Compare top-level fields
     compareField('clientId', oldOrderData.clientId, data.clientId);
     compareField('reportedProblem', oldOrderData.reportedProblem, data.reportedProblem);
+    compareField('technicalSolution', oldOrderData.technicalSolution, data.technicalSolution);
+
 
     // Compare nested collaborator fields
     if (data.collaborator) {
@@ -497,6 +505,27 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
 
     const currentOrderData = currentOrderSnap.data() as ServiceOrder;
     const oldStatus = currentOrderData.status;
+
+    // Prevent status change if old status is 'entregue'
+    if (oldStatus === 'entregue') {
+        return { updatedOrder: null, emailSent: false, emailErrorMessage: "OS com status 'Entregue' não pode ter seu status alterado." };
+    }
+
+    // Define valid status transitions
+    const validTransitions: Record<ServiceOrderStatus, ServiceOrderStatus[]> = {
+        'aberta': ['em_analise'],
+        'em_analise': ['aguardando_peca', 'aguardando_terceiros', 'pronta_entrega'],
+        'aguardando_peca': ['em_analise', 'pronta_entrega'],
+        'aguardando_terceiros': ['em_analise', 'pronta_entrega'],
+        'pronta_entrega': ['entregue'],
+        'entregue': [], // No transitions from 'entregue'
+    };
+
+    const allowedNextStatuses = validTransitions[oldStatus];
+
+    if (!allowedNextStatuses || !allowedNextStatuses.includes(newStatus)) {
+        return { updatedOrder: null, emailSent: false, emailErrorMessage: `Transição de status inválida de '${oldStatus}' para '${newStatus}'.` };
+    }
 
     const newLogEntry: LogEntry = {
         timestamp: new Date(),

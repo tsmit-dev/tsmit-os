@@ -48,7 +48,7 @@ export function OsTable({ orders, title }: OsTableProps) {
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="border rounded-md">
+        <div className="border rounded-md overflow-x-auto"> {/* Added overflow-x-auto here */}
           <Table>
             <TableHeader>
               <TableRow>
