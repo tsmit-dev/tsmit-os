@@ -36,10 +36,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "./ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "./ui/form";
 import { Input } from "./ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { PlusCircle, Edit, Trash2 } from "lucide-react";
+import { Checkbox } from "./ui/checkbox"; // Import Checkbox
 
 interface ClientsTableProps {
   clients: Client[];
@@ -50,6 +51,9 @@ const formSchema = z.object({
   name: z.string().min(2, "Nome do cliente é obrigatório."),
   cnpj: z.string().optional(),
   address: z.string().optional(),
+  webProtection: z.boolean().default(false).optional(),
+  backup: z.boolean().default(false).optional(),
+  edr: z.boolean().default(false).optional(),
 });
 
 export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
@@ -60,11 +64,26 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
+    defaultValues: {
+        name: '',
+        cnpj: '',
+        address: '',
+        webProtection: false,
+        backup: false,
+        edr: false,
+    }
   });
 
   const handleOpenSheet = (client: Client | null) => {
     setEditingClient(client);
-    form.reset(client ? client : { name: '', cnpj: '', address: '' });
+    form.reset(client ? { 
+        name: client.name, 
+        cnpj: client.cnpj || '', 
+        address: client.address || '', 
+        webProtection: client.webProtection || false,
+        backup: client.backup || false,
+        edr: client.edr || false,
+    } : { name: '', cnpj: '', address: '', webProtection: false, backup: false, edr: false });
     form.clearErrors();
     setIsSheetOpen(true);
   };
@@ -75,6 +94,9 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
         name: values.name,
         cnpj: values.cnpj,
         address: values.address,
+        webProtection: values.webProtection,
+        backup: values.backup,
+        edr: values.edr,
       };
 
       if (editingClient) {
@@ -194,6 +216,71 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
                <FormField control={form.control} name="address" render={({ field }) => (
                   <FormItem><FormLabel>Endereço (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                )} />
+
+               <div className="space-y-2">
+                    <h3 className="text-lg font-semibold">Serviços Contratados</h3>
+                    <FormField
+                        control={form.control}
+                        name="webProtection"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                                <FormControl>
+                                    <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                    <FormLabel>WebProtection</FormLabel>
+                                    <FormDescription>
+                                        Marque se o cliente contratou o serviço de WebProtection.
+                                    </FormDescription>
+                                </div>
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="backup"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                                <FormControl>
+                                    <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                    <FormLabel>Backup</FormLabel>
+                                    <FormDescription>
+                                        Marque se o cliente contratou o serviço de Backup.
+                                    </FormDescription>
+                                </div>
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="edr"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                                <FormControl>
+                                    <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                    <FormLabel>EDR</FormLabel>
+                                    <FormDescription>
+                                        Marque se o cliente contratou o serviço de EDR.
+                                    </FormDescription>
+                                </div>
+                            </FormItem>
+                        )}
+                    />
+               </div>
+
               <SheetFooter>
                 <SheetClose asChild><Button type="button" variant="ghost">Cancelar</Button></SheetClose>
                 <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Salvando..." : "Salvar"}</Button>

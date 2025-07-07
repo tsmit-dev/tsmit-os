@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ServiceOrder, ServiceOrderStatus } from "@/lib/types";
+import { ServiceOrder, ServiceOrderStatus, ContractedServices } from "@/lib/types";
 import { getServiceOrderById, updateServiceOrder } from "@/lib/data";
 import { useAuth } from "@/components/auth-provider";
 import { usePermissions } from "@/context/PermissionsContext";
@@ -15,10 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
-import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File } from "lucide-react";
+import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File, CheckCircle, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function OsDetailPage() {
     const params = useParams();
@@ -33,6 +37,7 @@ export default function OsDetailPage() {
     const [isUpdating, setIsUpdating] = useState(false);
     const [currentStatus, setCurrentStatus] = useState<ServiceOrderStatus | undefined>();
     const [technicalSolution, setTechnicalSolution] = useState('');
+    const [confirmedServices, setConfirmedServices] = useState<ContractedServices>({ webProtection: false, backup: false, edr: false });
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
@@ -57,6 +62,7 @@ export default function OsDetailPage() {
                         setOrder(data);
                         setCurrentStatus(data.status);
                         setTechnicalSolution(data.technicalSolution || '');
+                        setConfirmedServices(data.confirmedServices || { webProtection: false, backup: false, edr: false });
                     } else {
                         toast({ title: "Erro", description: "Ordem de Serviço não encontrada.", variant: "destructive" });
                         router.push('/os');
@@ -79,7 +85,23 @@ export default function OsDetailPage() {
             return;
         }
 
-        if (currentStatus === order.status && technicalSolution === (order.technicalSolution || '')) {
+        // Validation for "Pronta para Entrega" and "Entregue" status
+        const isReadyForDeliveryOrDelivered = currentStatus === 'pronta_entrega' || currentStatus === 'entregue';
+        const allContractedServicesConfirmed = 
+            (!order.contractedServices?.webProtection || confirmedServices.webProtection) &&
+            (!order.contractedServices?.backup || confirmedServices.backup) &&
+            (!order.contractedServices?.edr || confirmedServices.edr);
+
+        if (isReadyForDeliveryOrDelivered && !allContractedServicesConfirmed) {
+            toast({
+                title: "Serviços Contratados Pendentes",
+                description: "Por favor, confirme a instalação de todos os serviços contratados antes de avançar para este status.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (currentStatus === order.status && technicalSolution === (order.technicalSolution || '') && JSON.stringify(confirmedServices) === JSON.stringify(order.confirmedServices)) {
             toast({ title: "Nenhuma alteração", description: "Nenhuma alteração para salvar." });
             return;
         }
@@ -91,7 +113,9 @@ export default function OsDetailPage() {
                 currentStatus,
                 user.name,
                 technicalSolution,
-                technicalSolution.trim() ? `Nota/Solução: ${technicalSolution}` : undefined
+                technicalSolution.trim() ? `Nota/Solução: ${technicalSolution}` : undefined,
+                order.attachments, // Pass existing attachments
+                confirmedServices // Pass confirmed services
             );
             
             if (result.updatedOrder) {
@@ -179,7 +203,8 @@ export default function OsDetailPage() {
                         user.name,
                         order.technicalSolution || '',
                         `Anexo adicionado: ${selectedFile.name}`,
-                        updatedAttachments
+                        updatedAttachments,
+                        order.confirmedServices // Pass existing confirmed services
                     );
 
                     if (result.updatedOrder) {
@@ -236,7 +261,8 @@ export default function OsDetailPage() {
                 user.name,
                 order.technicalSolution || '',
                 `Anexo removido: ${getFileNameFromUrl(urlToDelete)}`,
-                updatedAttachments
+                updatedAttachments,
+                order.confirmedServices // Pass existing confirmed services
             );
 
             if (result.updatedOrder) {
@@ -278,6 +304,17 @@ export default function OsDetailPage() {
         }
     };
 
+    const hasIncompleteServices = (
+        (order?.contractedServices?.webProtection && !confirmedServices.webProtection) ||
+        (order?.contractedServices?.backup && !confirmedServices.backup) ||
+        (order?.contractedServices?.edr && !confirmedServices.edr)
+    );
+
+    const showAlertBanner = (
+        (order?.status === 'pronta_entrega' || order?.status === 'entregue') &&
+        hasIncompleteServices
+    );
+
     if (loadingPermissions || !hasPermission('os') || loadingOrder) return <OsDetailSkeleton />;
 
     if (!order) return <p>Ordem de Serviço não encontrada.</p>;
@@ -286,6 +323,8 @@ export default function OsDetailPage() {
     const canChangeStatus = hasPermission('adminSettings') || hasPermission('os');
     const canShowUpdateCard = canEditSolution || canChangeStatus;
     const canUploadAttachment = hasPermission('adminSettings') || hasPermission('os');
+
+    const showServiceConfirmation = currentStatus === 'pronta_entrega' || currentStatus === 'entregue';
 
     return (
         <div className="container mx-auto space-y-6">
@@ -301,6 +340,16 @@ export default function OsDetailPage() {
                     </Button>
                 </Link>
             </div>
+
+            {showAlertBanner && (
+                <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Atenção: Serviços Contratados Pendentes!</AlertTitle>
+                    <AlertDescription>
+                        Esta OS está em status &quot;Pronta p/ Entrega&quot; ou &quot;Finalizada&quot;, mas a confirmação de instalação de todos os serviços contratados está incompleta.
+                    </AlertDescription>
+                </Alert>
+            )}
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="md:col-span-2">
@@ -326,6 +375,21 @@ export default function OsDetailPage() {
             <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><FileText /> Problema Relatado</CardTitle></CardHeader>
                 <CardContent><p className="text-muted-foreground">{order.reportedProblem}</p></CardContent>
+            </Card>
+
+            {/* New card for Contracted Services */}
+            <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><CheckCircle /> Serviços Contratados</CardTitle></CardHeader>
+                <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                        {order.contractedServices?.webProtection && <Badge variant="default">WebProtection</Badge>}
+                        {order.contractedServices?.backup && <Badge variant="default">Backup</Badge>}
+                        {order.contractedServices?.edr && <Badge variant="default">EDR</Badge>}
+                        {!order.contractedServices?.webProtection && !order.contractedServices?.backup && !order.contractedServices?.edr && (
+                            <p className="text-muted-foreground">Nenhum serviço contratado registrado para este cliente.</p>
+                        )}
+                    </div>
+                </CardContent>
             </Card>
 
             {canShowUpdateCard && (
@@ -367,6 +431,55 @@ export default function OsDetailPage() {
                                 </Select>
                             </div>
                         )}
+                        
+                        {showServiceConfirmation && (
+                            <div className="space-y-2 border p-4 rounded-md bg-yellow-50/20 dark:bg-yellow-950/20 relative">
+                                <h3 className="text-md font-semibold flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+                                    <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                                    Confirmação de Serviços Contratados
+                                </h3>
+                                <p className="text-sm text-muted-foreground">Marque os serviços que foram instalados e confirmados para este cliente:</p>
+                                
+                                {order.contractedServices?.webProtection && (
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox 
+                                            id="confirmWebProtection" 
+                                            checked={confirmedServices.webProtection}
+                                            onCheckedChange={(checked) => setConfirmedServices(prev => ({ ...prev, webProtection: !!checked }))}
+                                            disabled={isUpdating}
+                                        />
+                                        <Label htmlFor="confirmWebProtection">WebProtection instalado e confirmado</Label>
+                                    </div>
+                                )}
+                                {order.contractedServices?.backup && (
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox 
+                                            id="confirmBackup" 
+                                            checked={confirmedServices.backup}
+                                            onCheckedChange={(checked) => setConfirmedServices(prev => ({ ...prev, backup: !!checked }))}
+                                            disabled={isUpdating}
+                                        />
+                                        <Label htmlFor="confirmBackup">Backup instalado e confirmado</Label>
+                                    </div>
+                                )}
+                                {order.contractedServices?.edr && (
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox 
+                                            id="confirmEdr" 
+                                            checked={confirmedServices.edr}
+                                            onCheckedChange={(checked) => setConfirmedServices(prev => ({ ...prev, edr: !!checked }))}
+                                            disabled={isUpdating}
+                                        />
+                                        <Label htmlFor="confirmEdr">EDR instalado e confirmado</Label>
+                                    </div>
+                                )}
+
+                                {!order.contractedServices?.webProtection && !order.contractedServices?.backup && !order.contractedServices?.edr && (
+                                    <p className="text-muted-foreground italic">Nenhum serviço contratado para este cliente. Nenhuma confirmação é necessária.</p>
+                                )}
+                            </div>
+                        )}
+
                         {canEditSolution && (
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Solução Técnica / Nota</label>
@@ -379,7 +492,10 @@ export default function OsDetailPage() {
                                 />
                             </div>
                         )}
-                        <Button onClick={handleUpdate} disabled={isUpdating || !canChangeStatus}>
+                        <Button 
+                            onClick={handleUpdate} 
+                            disabled={isUpdating || !canChangeStatus || (showServiceConfirmation && hasIncompleteServices)}
+                        >
                             {isUpdating ? 'Salvando...' : 'Salvar Alterações'}
                         </Button>
                     </CardContent>

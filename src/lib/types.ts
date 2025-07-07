@@ -29,6 +29,9 @@ export type Client = {
   cnpj?: string;
   address?: string;
   path?: string;
+  webProtection?: boolean;
+  backup?: boolean;
+  edr?: boolean;
 };
 
 export type ServiceOrderStatus =
@@ -44,6 +47,12 @@ export type LogEntry = {
   fromStatus: ServiceOrderStatus;
   toStatus: ServiceOrderStatus;
   observation?: string;
+};
+
+export type ContractedServices = {
+  webProtection: boolean;
+  backup: boolean;
+  edr: boolean;
 };
 
 export type ServiceOrder = {
@@ -69,6 +78,8 @@ export type ServiceOrder = {
   logs: LogEntry[];
   clientName?: string; 
   attachments?: string[];
+  contractedServices?: ContractedServices; // New field for services contracted by the client for this OS
+  confirmedServices?: ContractedServices; // New field for services confirmed by the analyst for this OS
 };
 
 export interface EmailSettings {

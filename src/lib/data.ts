@@ -20,7 +20,7 @@
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  */
 "use client"
-import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions, UpdateServiceOrderResult } from "./types";
+import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions, UpdateServiceOrderResult, ContractedServices } from "./types";
 import { db, auth } from "./firebase"; 
 import { collection, getDocs, getDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit, runTransaction, arrayUnion, setDoc, addDoc } from "firebase/firestore"; 
 import { createUserWithEmailAndPassword, deleteUser as deleteAuthUser, sendPasswordResetEmail } from "firebase/auth"; // Import specific auth functions
@@ -233,9 +233,9 @@ export const deleteClient = async (id: string): Promise<boolean> => {
 export const getServiceOrders = async (): Promise<ServiceOrder[]> => {
     // 1. Fetch all clients and create a map for quick lookups
     const clients = await getClients();
-    const clientMap = new Map<string, string>();
+    const clientMap = new Map<string, Client>(); // Change to store full client object
     clients.forEach(client => {
-        clientMap.set(client.id, client.name);
+        clientMap.set(client.id, client);
     });
 
     // 2. Fetch all service orders
@@ -243,16 +243,23 @@ export const getServiceOrders = async (): Promise<ServiceOrder[]> => {
     const q = query(serviceOrdersCollection, orderBy("createdAt", "desc"));
     const querySnapshot = await getDocs(q);
 
-    // 3. Map orders and efficiently look up client names from the map
+    // 3. Map orders and efficiently look up client names and contracted services from the map
     const serviceOrdersData = querySnapshot.docs.map(doc => {
         const order = {
             ...doc.data(),
             id: doc.id,
         } as ServiceOrder;
 
+        const client = clientMap.get(order.clientId);
+
         return {
             ...order,
-            clientName: clientMap.get(order.clientId) || 'Cliente não encontrado',
+            clientName: client ? client.name : 'Cliente não encontrado',
+            contractedServices: client ? { // Set contracted services from client profile
+                webProtection: client.webProtection || false,
+                backup: client.backup || false,
+                edr: client.edr || false,
+            } : { webProtection: false, backup: false, edr: false },
             // Ensure createdAt and log timestamps are Date objects for consistency
             createdAt: order.createdAt instanceof Date ? order.createdAt : (order.createdAt as any).toDate(),
             logs: order.logs.map(log => ({
@@ -278,6 +285,11 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
             ...orderData, 
             id: serviceOrderSnap.id,
             clientName: client ? client.name : 'Cliente não encontrado',
+            contractedServices: client ? { // Set contracted services from client profile
+                webProtection: client.webProtection || false,
+                backup: client.backup || false,
+                edr: client.edr || false,
+            } : { webProtection: false, backup: false, edr: false },
             // Ensure createdAt and log timestamps are Date objects
             createdAt: orderData.createdAt instanceof Date ? orderData.createdAt : (orderData.createdAt as any).toDate(),
             logs: orderData.logs.map(log => ({
@@ -292,7 +304,7 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
 };
 
 export const addServiceOrder = async (
-    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments'>
+    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServices'>
   ): Promise<ServiceOrder> => {
     const serviceOrdersCollection = collection(db, "serviceOrders");
   
@@ -309,7 +321,15 @@ export const addServiceOrder = async (
   
     const formattedOrderNumber = `OS-${String(nextOrderNumber).padStart(3, '0')}`;
   
-    // Agora sim, roda a transação normalmente
+    // Fetch client to get contracted services at the time of OS creation
+    const client = await getClientById(data.clientId);
+    const contractedServicesAtCreation: ContractedServices = client ? {
+        webProtection: client.webProtection || false,
+        backup: client.backup || false,
+        edr: client.edr || false,
+    } : { webProtection: false, backup: false, edr: false };
+
+    // Now, run the transaction
     const newOrder = await runTransaction(db, async (tx) => {
       const newOrderData: Omit<ServiceOrder, 'id'> = {
         ...data,
@@ -325,7 +345,9 @@ export const addServiceOrder = async (
             observation: 'OS criada no sistema.',
           }
         ],
-        attachments: [] // Initialize attachments as an empty array
+        attachments: [], // Initialize attachments as an empty array
+        contractedServices: contractedServicesAtCreation, // Save contracted services from client profile at creation
+        confirmedServices: { webProtection: false, backup: false, edr: false }, // Initialize all as false
       };
   
       const newServiceOrderRef = doc(serviceOrdersCollection);
@@ -337,7 +359,7 @@ export const addServiceOrder = async (
     return newOrder;
   };
 
-export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string, attachments?: string[]): Promise<UpdateServiceOrderResult> => {
+export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string, attachments?: string[], confirmedServices?: ContractedServices): Promise<UpdateServiceOrderResult> => {
     const serviceOrderDocRef = doc(db, "serviceOrders", id);
     
     const currentOrderSnap = await getDoc(serviceOrderDocRef);
@@ -365,6 +387,10 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
 
     if (attachments !== undefined) {
         updatePayload.attachments = attachments;
+    }
+
+    if (confirmedServices !== undefined) {
+        updatePayload.confirmedServices = confirmedServices;
     }
 
     await updateDoc(serviceOrderDocRef, updatePayload);
