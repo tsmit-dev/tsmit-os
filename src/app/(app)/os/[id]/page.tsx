@@ -46,6 +46,42 @@ export default function OsDetailPage() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const formatValueForDisplay = (value: any): string => {
+        if (typeof value === 'boolean') {
+            return value ? 'Sim' : 'Não';
+        }
+        return String(value);
+    };
+
+    const getTranslatedFieldName = (field: string): string => {
+        const translations: { [key: string]: string } = {
+            // Basic OS fields
+            orderNumber: 'Número da OS',
+            clientId: 'Cliente (ID)', // Consider fetching client name if more user-friendly
+            reportedProblem: 'Problema Relatado',
+            analyst: 'Analista',
+            technicalSolution: 'Solução Técnica',
+            // Collaborator fields (nested under collaborator.field)
+            'collaborator.name': 'Nome do Contato',
+            'collaborator.email': 'Email do Contato',
+            'collaborator.phone': 'Telefone do Contato',
+            // Equipment fields (nested under equipment.field)
+            'equipment.type': 'Tipo do Equipamento',
+            'equipment.brand': 'Marca do Equipamento',
+            'equipment.model': 'Modelo do Equipamento',
+            'equipment.serialNumber': 'Número de Série',
+            // Contracted Services (direct fields for simplicity, might need deeper mapping)
+            'contractedServices.webProtection': 'Serviço: WebProtection',
+            'contractedServices.backup': 'Serviço: Backup',
+            'contractedServices.edr': 'Serviço: EDR',
+            // Confirmed Services (direct fields for simplicity, might need deeper mapping)
+            'confirmedServices.webProtection': 'Serviço Confirmado: WebProtection',
+            'confirmedServices.backup': 'Serviço Confirmado: Backup',
+            'confirmedServices.edr': 'Serviço Confirmado: EDR',
+        };
+        return translations[field] || field; // Return translated name or original if not found
+    };
+
     // useCallback to memoize the fetch function, preventing unnecessary re-renders
     const fetchServiceOrder = useCallback(async () => {
         if (!id) return;
@@ -323,17 +359,6 @@ export default function OsDetailPage() {
         }
     };
 
-    const hasIncompleteServices = (
-        (order?.contractedServices?.webProtection && !confirmedServices.webProtection) ||
-        (order?.contractedServices?.backup && !confirmedServices.backup) ||
-        (order?.contractedServices?.edr && !confirmedServices.edr)
-    );
-
-    const showAlertBanner = (
-        (order?.status === 'pronta_entrega' || order?.status === 'entregue') &&
-        hasIncompleteServices
-    );
-
     if (loadingPermissions || !hasPermission('os') || loadingOrder) return <OsDetailSkeleton />;
 
     if (!order) return <p>Ordem de Serviço não encontrada.</p>;
@@ -345,6 +370,13 @@ export default function OsDetailPage() {
     const canEditOsDetails = hasPermission('adminSettings') || hasPermission('os'); // Permission to edit OS details
 
     const showServiceConfirmation = currentStatus === 'pronta_entrega' || currentStatus === 'entregue';
+
+    const hasIncompleteServices =
+    (order.contractedServices?.webProtection && !confirmedServices.webProtection) ||
+    (order.contractedServices?.backup && !confirmedServices.backup) ||
+    (order.contractedServices?.edr && !confirmedServices.edr);
+
+    const showAlertBanner = showServiceConfirmation && hasIncompleteServices;
 
     return (
         <div className="container mx-auto space-y-6">
@@ -639,10 +671,10 @@ export default function OsDetailPage() {
                                         <div className="mt-2 space-y-1">
                                             {editLog.changes.map((change, changeIndex) => (
                                                 <p key={changeIndex} className="text-xs bg-gray-50 dark:bg-gray-800 p-2 rounded-md">
-                                                    <span className="font-medium">{change.field}:</span>{" "}
-                                                    <span className="text-red-500 line-through">{String(change.oldValue)}</span>{" "}
+                                                    <span className="font-medium">{getTranslatedFieldName(change.field)}:</span>{" "}
+                                                    <span className="text-red-500 line-through">{formatValueForDisplay(change.oldValue)}</span>{" "}
                                                     <ArrowRight className="inline-block h-3 w-3 text-muted-foreground mx-1" />{" "}
-                                                    <span className="text-green-500">{String(change.newValue)}</span>
+                                                    <span className="text-green-500">{formatValueForDisplay(change.newValue)}</span>
                                                 </p>
                                             ))}
                                         </div>
