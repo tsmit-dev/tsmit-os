@@ -61,8 +61,8 @@ export type ServiceOrder = {
   clientId: string;
   collaborator: {
     name: string;
-    email: string;
-    phone: string;
+    email?: string; // Made email optional
+    phone?: string; // Made phone optional
   };
   equipment: {
     type: string;

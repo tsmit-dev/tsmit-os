@@ -303,6 +303,51 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
     return null;
 };
 
+// Define a type for the updatable fields of a ServiceOrder (excluding read-only fields)
+export type UpdateServiceOrderDetailsData = Partial<Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServices'>> & {
+    collaborator?: { // Make sure collaborator and equipment are properly defined if they're partial
+        name?: string;
+        email?: string;
+        phone?: string;
+    };
+    equipment?: {
+        type?: string;
+        brand?: string;
+        model?: string;
+        serialNumber?: string;
+    };
+};
+
+export const updateServiceOrderDetails = async (id: string, data: UpdateServiceOrderDetailsData): Promise<ServiceOrder | null> => {
+    const serviceOrderDocRef = doc(db, "serviceOrders", id);
+    await updateDoc(serviceOrderDocRef, data);
+    
+    // Fetch the updated document to return the full object with clientName and other computed fields
+    const updatedServiceOrderSnap = await getDoc(serviceOrderDocRef);
+    if (updatedServiceOrderSnap.exists()) {
+        const updatedOrderData = updatedServiceOrderSnap.data() as ServiceOrder;
+        const client = await getClientById(updatedOrderData.clientId);
+
+        return {
+            ...updatedOrderData, 
+            id: updatedServiceOrderSnap.id,
+            clientName: client ? client.name : 'Cliente não encontrado',
+            contractedServices: client ? { 
+                webProtection: client.webProtection || false,
+                backup: client.backup || false,
+                edr: client.edr || false,
+            } : { webProtection: false, backup: false, edr: false },
+            createdAt: updatedOrderData.createdAt instanceof Date ? updatedOrderData.createdAt : (updatedOrderData.createdAt as any).toDate(),
+            logs: updatedOrderData.logs.map(log => ({
+                ...log,
+                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+            })),
+            attachments: updatedOrderData.attachments || [] 
+        } as ServiceOrder;
+    }
+    return null;
+};
+
 export const addServiceOrder = async (
     data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServices'>
   ): Promise<ServiceOrder> => {
