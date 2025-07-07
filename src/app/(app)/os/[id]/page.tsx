@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
-import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File, CheckCircle, AlertCircle, Edit } from "lucide-react";
+import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File, CheckCircle, AlertCircle, Edit, ListTree } from "lucide-react";
 import Link from "next/link";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
@@ -42,7 +42,7 @@ export default function OsDetailPage() {
     const [isEditOsDialogOpen, setIsEditOsDialogOpen] = useState(false); // State for edit dialog
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [uploading, setUploading] = useState(false);
+    const [uploading, setUploading] = useState(0); // Changed to number for progress
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -189,7 +189,7 @@ export default function OsDetailPage() {
             return;
         }
 
-        setUploading(true);
+        setUploading(1); // Set to 1 to indicate uploading started
         const filePath = `service_orders/${order.id}/attachments/${selectedFile.name}`;
         const storageRef = ref(storage, filePath);
         const uploadTask = uploadBytesResumable(storageRef, selectedFile);
@@ -206,7 +206,7 @@ export default function OsDetailPage() {
                     errorMessage = `Falha no upload: ${error.message}`;
                 }
                 toast({ title: "Erro", description: errorMessage, variant: "destructive" });
-                setUploading(false);
+                setUploading(0); // Reset to 0
                 setUploadProgress(0);
             },
             async () => {
@@ -248,7 +248,7 @@ export default function OsDetailPage() {
                     }
                     toast({ title: "Erro", description: errorMessage, variant: "destructive" });
                 } finally {
-                    setUploading(false);
+                    setUploading(0); // Reset to 0
                     setUploadProgress(0);
                 }
             }
@@ -311,7 +311,7 @@ export default function OsDetailPage() {
             const urlObj = new URL(url);
             const path = decodeURIComponent(urlObj.pathname);
             // This regex tries to capture the filename after the last '/' and before '?' or end of string
-            const match = path.match(/[^/\?#]+\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|txt)$/i);
+            const match = path.match(/[^/?#]+\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|txt)$/i);
             return match ? match[0] : "Arquivo";
         } catch (e: unknown) { 
             console.error("Invalid URL", url, e);
@@ -547,18 +547,18 @@ export default function OsDetailPage() {
                                 type="file" 
                                 className="max-w-xs"
                                 onChange={handleFileChange}
-                                disabled={uploading || !canUploadAttachment}
+                                disabled={uploading > 0 || !canUploadAttachment}
                                 ref={fileInputRef}
                             />
                             <Button 
                                 onClick={handleUploadFile} 
-                                disabled={!selectedFile || uploading || !canUploadAttachment}
+                                disabled={!selectedFile || uploading > 0 || !canUploadAttachment}
                             >
-                                {uploading ? `Enviando (${Math.round(uploadProgress)}%)` : 'Enviar Anexo'}
-                                {uploading ? null : <Upload className="ml-2 h-4 w-4" />}
+                                {uploading > 0 ? `Enviando (${Math.round(uploadProgress)}%)` : 'Enviar Anexo'}
+                                {uploading > 0 ? null : <Upload className="ml-2 h-4 w-4" />}
                             </Button>
                         </div>
-                        {selectedFile && !uploading && (
+                        {selectedFile && uploading === 0 && (
                             <p className="text-sm text-muted-foreground mt-2">Arquivo selecionado: {selectedFile.name}</p>
                         )}
                         
@@ -581,7 +581,7 @@ export default function OsDetailPage() {
                                                 variant="ghost" 
                                                 size="icon" 
                                                 onClick={() => handleDeleteAttachment(url)}
-                                                disabled={isUpdating || uploading || !canUploadAttachment}
+                                                disabled={isUpdating || uploading > 0 || !canUploadAttachment}
                                                 className="ml-2 shrink-0"
                                                 title="Remover anexo"
                                             >
@@ -597,7 +597,7 @@ export default function OsDetailPage() {
             )}
             
             <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><History /> Histórico da OS</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><History /> Histórico de Status da OS</CardTitle></CardHeader>
                 <CardContent>
                     <ul className="space-y-4">
                         {order.logs.slice().reverse().map((log, index) => (
@@ -620,6 +620,40 @@ export default function OsDetailPage() {
                     </ul>
                 </CardContent>
             </Card>
+
+            {/* New Card for Edit History */}
+            {order.editLogs && order.editLogs.length > 0 && (
+                <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><ListTree /> Histórico de Edição da OS</CardTitle></CardHeader>
+                    <CardContent>
+                        <ul className="space-y-4">
+                            {order.editLogs.slice().reverse().map((editLog, index) => (
+                                <li key={index} className="flex items-start gap-4 text-sm">
+                                    <div className="text-muted-foreground text-right w-32 shrink-0">
+                                        <p>{format(new Date(editLog.timestamp), "dd/MM/yy")}</p>
+                                        <p>{format(new Date(editLog.timestamp), "HH:mm")}</p>
+                                    </div>
+                                    <div className="relative w-full">
+                                        <p className="font-semibold">Editado por: {editLog.responsible}</p>
+                                        {editLog.observation && <p className="text-sm text-muted-foreground mt-1">Observação: {editLog.observation}</p>}
+                                        <div className="mt-2 space-y-1">
+                                            {editLog.changes.map((change, changeIndex) => (
+                                                <p key={changeIndex} className="text-xs bg-gray-50 dark:bg-gray-800 p-2 rounded-md">
+                                                    <span className="font-medium">{change.field}:</span>{" "}
+                                                    <span className="text-red-500 line-through">{String(change.oldValue)}</span>{" "}
+                                                    <ArrowRight className="inline-block h-3 w-3 text-muted-foreground mx-1" />{" "}
+                                                    <span className="text-green-500">{String(change.newValue)}</span>
+                                                </p>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    </CardContent>
+                </Card>
+            )}
+
             {order && (
                 <EditOsDialog 
                     isOpen={isEditOsDialogOpen}
