@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ServiceOrder, Client } from "@/lib/types";
+import { ServiceOrder, Client, EditLogChange } from "@/lib/types";
 import { updateServiceOrderDetails, getClients } from "@/lib/data";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -28,6 +28,7 @@ import { Textarea } from "./ui/textarea";
 import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/components/auth-provider"; // Import useAuth
 
 interface EditOsDialogProps {
   isOpen: boolean;
@@ -46,11 +47,12 @@ const formSchema = z.object({
   equipmentModel: z.string().min(2, "Modelo do equipamento é obrigatório."),
   equipmentSerialNumber: z.string().min(2, "Número de série é obrigatório."),
   reportedProblem: z.string().min(10, "Problema relatado é obrigatório e deve ter no mínimo 10 caracteres."),
-  analyst: z.string().min(2, "Nome do analista é obrigatório."),
+  // analyst field is explicitly NOT part of the editable schema
 });
 
 export function EditOsDialog({ isOpen, onClose, serviceOrder, onSaveSuccess }: EditOsDialogProps) {
   const { toast } = useToast();
+  const { user } = useAuth(); // Get current user
   const [clients, setClients] = useState<Client[]>([]);
   const [loadingClients, setLoadingClients] = useState(true);
 
@@ -66,7 +68,6 @@ export function EditOsDialog({ isOpen, onClose, serviceOrder, onSaveSuccess }: E
       equipmentModel: "",
       equipmentSerialNumber: "",
       reportedProblem: "",
-      analyst: "",
     },
   });
 
@@ -98,14 +99,17 @@ export function EditOsDialog({ isOpen, onClose, serviceOrder, onSaveSuccess }: E
         equipmentModel: serviceOrder.equipment.model,
         equipmentSerialNumber: serviceOrder.equipment.serialNumber,
         reportedProblem: serviceOrder.reportedProblem,
-        analyst: serviceOrder.analyst,
+        // analyst is intentionally not reset as it's not editable via this form
       });
       form.clearErrors();
     }
   }, [serviceOrder, form]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (!serviceOrder) return;
+    if (!serviceOrder || !user?.name) {
+        toast({ title: "Erro", description: "Usuário não autenticado ou OS não carregada.", variant: "destructive" });
+        return;
+    }
 
     try {
       const updatedData = {
@@ -122,10 +126,11 @@ export function EditOsDialog({ isOpen, onClose, serviceOrder, onSaveSuccess }: E
           serialNumber: values.equipmentSerialNumber,
         },
         reportedProblem: values.reportedProblem,
-        analyst: values.analyst,
+        // analyst field is NOT sent for update here as it's not editable.
       };
 
-      await updateServiceOrderDetails(serviceOrder.id, updatedData);
+      // Pass the responsibleUserName (current logged-in user's name)
+      await updateServiceOrderDetails(serviceOrder.id, updatedData, user.name);
       toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
       onSaveSuccess();
       onClose();
@@ -204,9 +209,14 @@ export function EditOsDialog({ isOpen, onClose, serviceOrder, onSaveSuccess }: E
                 )} />
 
                 <h4 className="font-semibold mt-4">Dados do Analista</h4>
-                <FormField control={form.control} name="analyst" render={({ field }) => (
-                    <FormItem><FormLabel>Analista Responsável</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
+                {/* Analyst field is read-only and not part of the form schema for editing */}
+                <FormItem>
+                    <FormLabel>Analista Responsável</FormLabel>
+                    <FormControl>
+                        <Input value={serviceOrder?.analyst || 'N/A'} readOnly disabled className="bg-gray-100 dark:bg-gray-800 cursor-not-allowed" />
+                    </FormControl>
+                    <FormMessage />
+                </FormItem>
             </div>
 
             <SheetFooter>

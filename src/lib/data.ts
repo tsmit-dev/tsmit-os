@@ -20,7 +20,7 @@
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  */
 "use client"
-import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions, UpdateServiceOrderResult, ContractedServices } from "./types";
+import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions, UpdateServiceOrderResult, ContractedServices, EditLogEntry, EditLogChange } from "./types";
 import { db, auth } from "./firebase"; 
 import { collection, getDocs, getDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit, runTransaction, arrayUnion, setDoc, addDoc } from "firebase/firestore"; 
 import { createUserWithEmailAndPassword, deleteUser as deleteAuthUser, sendPasswordResetEmail } from "firebase/auth"; // Import specific auth functions
@@ -296,7 +296,11 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
                 ...log,
                 timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
             })),
-            attachments: orderData.attachments || [] // Ensure attachments is an empty array if undefined
+            attachments: orderData.attachments || [], // Ensure attachments is an empty array if undefined
+            editLogs: orderData.editLogs?.map(log => ({
+                ...log,
+                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+            })) || []
         } as ServiceOrder;
     }
 
@@ -304,7 +308,7 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
 };
 
 // Define a type for the updatable fields of a ServiceOrder (excluding read-only fields)
-export type UpdateServiceOrderDetailsData = Partial<Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServices'>> & {
+export type UpdateServiceOrderDetailsData = Partial<Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServices' | 'analyst' | 'editLogs'>> & {
     collaborator?: { // Make sure collaborator and equipment are properly defined if they're partial
         name?: string;
         email?: string;
@@ -318,9 +322,85 @@ export type UpdateServiceOrderDetailsData = Partial<Omit<ServiceOrder, 'id' | 'o
     };
 };
 
-export const updateServiceOrderDetails = async (id: string, data: UpdateServiceOrderDetailsData): Promise<ServiceOrder | null> => {
+export const updateServiceOrderDetails = async (id: string, data: UpdateServiceOrderDetailsData, responsibleUserName: string): Promise<ServiceOrder | null> => {
     const serviceOrderDocRef = doc(db, "serviceOrders", id);
-    await updateDoc(serviceOrderDocRef, data);
+    const currentOrderSnap = await getDoc(serviceOrderDocRef);
+
+    if (!currentOrderSnap.exists()) {
+        throw new Error("Service Order not found.");
+    }
+
+    const oldOrderData = currentOrderSnap.data() as ServiceOrder;
+    const changes: EditLogChange[] = [];
+
+    // Helper to compare fields, including nested objects like 'collaborator' and 'equipment'
+    const compareField = (fieldName: string, oldVal: any, newVal: any) => {
+        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+            changes.push({
+                field: fieldName,
+                oldValue: oldVal === undefined ? null : oldVal,
+                newValue: newVal === undefined ? null : newVal,
+            });
+        }
+    };
+
+    // Compare top-level fields
+    compareField('clientId', oldOrderData.clientId, data.clientId);
+    compareField('reportedProblem', oldOrderData.reportedProblem, data.reportedProblem);
+
+    // Compare nested collaborator fields
+    if (data.collaborator) {
+        compareField('collaborator.name', oldOrderData.collaborator.name, data.collaborator.name);
+        compareField('collaborator.email', oldOrderData.collaborator.email, data.collaborator.email);
+        compareField('collaborator.phone', oldOrderData.collaborator.phone, data.collaborator.phone);
+    }
+
+    // Compare nested equipment fields
+    if (data.equipment) {
+        compareField('equipment.type', oldOrderData.equipment.type, data.equipment.type);
+        compareField('equipment.brand', oldOrderData.equipment.brand, data.equipment.brand);
+        compareField('equipment.model', oldOrderData.equipment.model, data.equipment.model);
+        compareField('equipment.serialNumber', oldOrderData.equipment.serialNumber, data.equipment.serialNumber);
+    }
+
+    // Only proceed with update and log if there are actual changes
+    if (changes.length > 0) {
+        const newEditLogEntry: EditLogEntry = {
+            timestamp: new Date(),
+            responsible: responsibleUserName,
+            changes: changes,
+            observation: "Detalhes da OS editados.", // Or a more specific observation
+        };
+
+        await updateDoc(serviceOrderDocRef, {
+            ...data,
+            editLogs: arrayUnion(newEditLogEntry) // Add new edit log entry
+        });
+    } else {
+        console.log("No significant changes detected for OS details. Skipping update.");
+        // If no changes, return the current data to avoid unnecessary re-fetch
+        const client = await getClientById(oldOrderData.clientId);
+        return {
+            ...oldOrderData,
+            id: oldOrderData.id,
+            clientName: client ? client.name : 'Cliente não encontrado',
+            contractedServices: client ? { 
+                webProtection: client.webProtection || false,
+                backup: client.backup || false,
+                edr: client.edr || false,
+            } : { webProtection: false, backup: false, edr: false },
+            createdAt: oldOrderData.createdAt instanceof Date ? oldOrderData.createdAt : (oldOrderData.createdAt as any).toDate(),
+            logs: oldOrderData.logs.map(log => ({
+                ...log,
+                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+            })),
+            attachments: oldOrderData.attachments || [],
+            editLogs: oldOrderData.editLogs?.map(log => ({
+                ...log,
+                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+            })) || []
+        } as ServiceOrder;
+    }
     
     // Fetch the updated document to return the full object with clientName and other computed fields
     const updatedServiceOrderSnap = await getDoc(serviceOrderDocRef);
@@ -342,14 +422,18 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
                 ...log,
                 timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
             })),
-            attachments: updatedOrderData.attachments || [] 
+            attachments: updatedOrderData.attachments || [],
+            editLogs: updatedOrderData.editLogs?.map(log => ({
+                ...log,
+                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+            })) || []
         } as ServiceOrder;
     }
     return null;
 };
 
 export const addServiceOrder = async (
-    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServices'>
+    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServices' | 'editLogs'>
   ): Promise<ServiceOrder> => {
     const serviceOrdersCollection = collection(db, "serviceOrders");
   
@@ -393,6 +477,7 @@ export const addServiceOrder = async (
         attachments: [], // Initialize attachments as an empty array
         contractedServices: contractedServicesAtCreation, // Save contracted services from client profile at creation
         confirmedServices: { webProtection: false, backup: false, edr: false }, // Initialize all as false
+        editLogs: [] // Initialize editLogs as an empty array
       };
   
       const newServiceOrderRef = doc(serviceOrdersCollection);
@@ -491,7 +576,11 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
                     ...log,
                     timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
                 })),
-                attachments: updatedOrderData.attachments || [] // Ensure attachments is an empty array if undefined
+                attachments: updatedOrderData.attachments || [], // Ensure attachments is an empty array if undefined
+                editLogs: updatedOrderData.editLogs?.map(log => ({
+                    ...log,
+                    timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+                })) || []
             } as ServiceOrder,
             emailSent,
             emailErrorMessage,

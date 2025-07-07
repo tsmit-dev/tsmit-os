@@ -55,6 +55,19 @@ export type ContractedServices = {
   edr: boolean;
 };
 
+export type EditLogChange = {
+  field: string;
+  oldValue: any;
+  newValue: any;
+};
+
+export type EditLogEntry = {
+  timestamp: Date;
+  responsible: string;
+  changes: EditLogChange[];
+  observation?: string; // Optional field for a general observation about the edit
+};
+
 export type ServiceOrder = {
   id: string;
   orderNumber: string;
@@ -80,6 +93,7 @@ export type ServiceOrder = {
   attachments?: string[];
   contractedServices?: ContractedServices; // New field for services contracted by the client for this OS
   confirmedServices?: ContractedServices; // New field for services confirmed by the analyst for this OS
+  editLogs?: EditLogEntry[]; // New field for detailed edit history
 };
 
 export interface EmailSettings {
