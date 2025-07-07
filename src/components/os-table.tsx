@@ -54,7 +54,7 @@ export function OsTable({ orders, title }: OsTableProps) {
               <TableRow>
                 <TableHead className="w-[100px]">OS</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Equipamento</TableHead>
+                <TableHead className="hidden sm:table-cell">Equipamento</TableHead>
                 <TableHead className="hidden md:table-cell">Data de Abertura</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -66,7 +66,7 @@ export function OsTable({ orders, title }: OsTableProps) {
                   <TableRow key={order.id} className="cursor-pointer" onClick={() => router.push(`/os/${order.id}`)}>
                     <TableCell className="font-medium">{order.orderNumber}</TableCell>
                     <TableCell>{order.clientName}</TableCell>
-                    <TableCell>{order.equipment.brand} {order.equipment.model}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{order.equipment.brand} {order.equipment.model}</TableCell>
                     <TableCell className="hidden md:table-cell">{new Date(order.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell><StatusBadge status={order.status} /></TableCell>
                     <TableCell className="text-right">

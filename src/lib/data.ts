@@ -506,9 +506,9 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
     const currentOrderData = currentOrderSnap.data() as ServiceOrder;
     const oldStatus = currentOrderData.status;
 
-    // Prevent status change if old status is 'entregue'
+    // Prevent modification if status is 'entregue'
     if (oldStatus === 'entregue') {
-        return { updatedOrder: null, emailSent: false, emailErrorMessage: "OS com status 'Entregue' não pode ter seu status alterado." };
+        return { updatedOrder: null, emailSent: false, emailErrorMessage: "OS com status 'Entregue' não pode ser modificada." };
     }
 
     // Define valid status transitions

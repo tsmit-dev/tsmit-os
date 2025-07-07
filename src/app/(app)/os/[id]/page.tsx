@@ -380,26 +380,26 @@ export default function OsDetailPage() {
 
     return (
         <div className="container mx-auto space-y-6">
-            <div className="flex justify-between items-start">
-                <div>
-                    <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.orderNumber}</h1>
-                    <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")} por {order.analyst}</p>
-                </div>
-                <div className="flex gap-2">
-                    {canEditOsDetails && (
-                        <Button variant="outline" onClick={() => setIsEditOsDialogOpen(true)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Editar OS
-                        </Button>
-                    )}
-                    <Link href={`/os/${order.id}/label`} passHref>
-                        <Button variant="outline">
-                            <Printer className="mr-2 h-4 w-4" />
-                            Imprimir Etiqueta
-                        </Button>
-                    </Link>
-                </div>
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+            <div>
+                <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.orderNumber}</h1>
+                <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")} por {order.analyst}</p>
             </div>
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                {canEditOsDetails && (
+                    <Button variant="outline" onClick={() => setIsEditOsDialogOpen(true)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Editar OS
+                    </Button>
+                )}
+                <Link href={`/os/${order.id}/label`} passHref>
+                    <Button variant="outline">
+                        <Printer className="mr-2 h-4 w-4" />
+                        Imprimir Etiqueta
+                    </Button>
+                </Link>
+            </div>
+        </div>
 
             {showAlertBanner && (
                 <Alert variant="destructive">
@@ -414,7 +414,7 @@ export default function OsDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="md:col-span-2">
                     <CardHeader><CardTitle className="flex items-center gap-2"><HardDrive /> Informações do Equipamento</CardTitle></CardHeader>
-                    <CardContent className="grid grid-cols-2 gap-4 text-sm">
+                    <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         <div><p className="font-semibold text-muted-foreground">Tipo</p><p>{order.equipment.type}</p></div>
                         <div><p className="font-semibold text-muted-foreground">Marca</p><p>{order.equipment.brand}</p></div>
                         <div><p className="font-semibold text-muted-foreground">Modelo</p><p>{order.equipment.model}</p></div>
@@ -472,7 +472,7 @@ export default function OsDetailPage() {
                                     onValueChange={(v: ServiceOrderStatus) => setCurrentStatus(v)}
                                     disabled={isUpdating}
                                 >
-                                    <SelectTrigger className="w-[280px]">
+                                    <SelectTrigger className="w-full sm:w-[280px]">
                                         <SelectValue placeholder="Selecione o status" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -481,6 +481,7 @@ export default function OsDetailPage() {
                                                 <SelectItem value="aberta">Aberta</SelectItem>
                                                 <SelectItem value="em_analise">Em Análise</SelectItem>
                                                 <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
+                                                <SelectItem value="aguardando_terceiros">Aguardando Terceiros</SelectItem>
                                                 <SelectItem value="pronta_entrega">Pronta para Entrega</SelectItem>
                                                 <SelectItem value="entregue">Entregue</SelectItem>
                                             </>

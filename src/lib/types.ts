@@ -4,7 +4,7 @@ export interface Permissions {
   os: boolean;
   adminReports: boolean;
   adminUsers: boolean;
-  adminRoles: boolean; // Added this line
+  adminRoles: boolean; 
   adminSettings: boolean;
 }
 
@@ -19,13 +19,13 @@ export type User = {
   name: string;
   email: string;
   roleId: string;
-  role: Role | null; // Changed to explicitly allow null
+  role: Role | null; 
 };
 
 export type Client = {
   id: string;
   name: string;
-  email?: string; // Added email to Client interface
+  email?: string; 
   cnpj?: string;
   address?: string;
   path?: string;
@@ -66,7 +66,7 @@ export type EditLogEntry = {
   timestamp: Date;
   responsible: string;
   changes: EditLogChange[];
-  observation?: string; // Optional field for a general observation about the edit
+  observation?: string; 
 };
 
 export type ServiceOrder = {
@@ -75,8 +75,8 @@ export type ServiceOrder = {
   clientId: string;
   collaborator: {
     name: string;
-    email?: string; // Made email optional
-    phone?: string; // Made phone optional
+    email?: string; 
+    phone?: string; 
   };
   equipment: {
     type: string;
@@ -84,7 +84,7 @@ export type ServiceOrder = {
     model: string;
     serialNumber: string;
   };
-  reportedProblem: string; // Changed from problemDescription
+  reportedProblem: string; 
   analyst: string;
   status: ServiceOrderStatus;
   technicalSolution?: string;
@@ -92,17 +92,17 @@ export type ServiceOrder = {
   logs: LogEntry[];
   clientName?: string; 
   attachments?: string[];
-  contractedServices?: ContractedServices; // New field for services contracted by the client for this OS
-  confirmedServices?: ContractedServices; // New field for services confirmed by the analyst for this OS
-  editLogs?: EditLogEntry[]; // New field for detailed edit history
+  contractedServices?: ContractedServices; 
+  confirmedServices?: ContractedServices; 
+  editLogs?: EditLogEntry[]; 
 };
 
 export interface EmailSettings {
   smtpServer: string;
   smtpPort?: number;
-  smtpSecurity?: 'none' | 'ssl' | 'tls' | 'ssltls' | 'starttls'; // Simplified for common options
+  smtpSecurity?: 'none' | 'ssl' | 'tls' | 'ssltls' | 'starttls'; 
   senderEmail?: string;
-  smtpPassword?: string; // Should be handled securely on backend
+  smtpPassword?: string; 
 }
 
 export type UpdateServiceOrderResult = {
