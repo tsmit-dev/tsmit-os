@@ -35,6 +35,7 @@ export default function OsDetailPage() {
 
     const [order, setOrder] = useState<ServiceOrder | null>(null);
     const isDelivered = order?.status === 'entregue';
+    const [uploading, setUploading] = useState(0);
     const [loadingOrder, setLoadingOrder] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
     const [currentStatus, setCurrentStatus] = useState<ServiceOrderStatus | undefined>();
@@ -46,7 +47,36 @@ export default function OsDetailPage() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // useCallback to memoize the fetch function, preventing unnecessary re-renders
+    const getTranslatedFieldName = (field: string): string => {
+        const translations: { [key: string]: string } = {
+            // Basic OS fields
+            orderNumber: 'Número da OS',
+            clientId: 'Cliente (ID)', // Consider fetching client name if more user-friendly
+            reportedProblem: 'Problema Relatado',
+            analyst: 'Analista',
+            technicalSolution: 'Solução Técnica',
+            // Collaborator fields (nested under collaborator.field)
+            'collaborator.name': 'Nome do Contato',
+            'collaborator.email': 'Email do Contato',
+            'collaborator.phone': 'Telefone do Contato',
+            // Equipment fields (nested under equipment.field)
+            'equipment.type': 'Tipo do Equipamento',
+            'equipment.brand': 'Marca do Equipamento',
+            'equipment.model': 'Modelo do Equipamento',
+            'equipment.serialNumber': 'Número de Série',
+            // Confirmed Services (direct fields for simplicity, might need deeper mapping)
+            'confirmedServices.webProtection': 'Serviço Confirmado: WebProtection',
+            'confirmedServices.backup': 'Serviço Confirmado: Backup',
+            'confirmedServices.edr': 'Serviço Confirmado: EDR',
+        };
+        return translations[field] || field; // Return translated name or original if not found
+    };
+
+    const formatValueForDisplay = (value: any): string => {
+        if (value === null || value === undefined || value === '') return 'N/A';
+        return String(value);
+    };
+    
     const fetchServiceOrder = useCallback(async () => {
         if (!id) return;
         setLoadingOrder(true);
@@ -94,10 +124,10 @@ export default function OsDetailPage() {
 
         // Validation for "Pronta para Entrega" and "Entregue" status
         const isReadyForDeliveryOrDelivered = currentStatus === 'pronta_entrega' || currentStatus === 'entregue';
-        const allContractedServicesConfirmed = 
-            (!order.contractedServices?.webProtection || confirmedServices.webProtection) &&
-            (!order.contractedServices?.backup || confirmedServices.backup) &&
-            (!order.contractedServices?.edr || confirmedServices.edr);
+        const allContractedServicesConfirmed = order.contractedServices?.every(service =>
+            confirmedServiceIds.includes(service.id)
+        ) ?? true;
+
 
         if (isReadyForDeliveryOrDelivered && !allContractedServicesConfirmed) {
             toast({
@@ -108,7 +138,7 @@ export default function OsDetailPage() {
             return;
         }
 
-        if (currentStatus === order.status && technicalSolution === (order.technicalSolution || '') && JSON.stringify(confirmedServices) === JSON.stringify(order.confirmedServices)) {
+        if (currentStatus === order.status && technicalSolution === (order.technicalSolution || '') && JSON.stringify(confirmedServiceIds.sort()) === JSON.stringify((order.confirmedServiceIds || []).sort())) {
             toast({ title: "Nenhuma alteração", description: "Nenhuma alteração para salvar." });
             return;
         }
@@ -116,14 +146,14 @@ export default function OsDetailPage() {
         setIsUpdating(true);
         try {
             const result = await updateServiceOrder(
-                order.id, 
+                order.id,
                 currentStatus,
                 user.name,
                 technicalSolution,
                 technicalSolution.trim() ? `Nota/Solução: ${technicalSolution}` : undefined,
-                order.attachments, // Pass existing attachments
-                confirmedServices // Pass confirmed services
-            );
+                order.attachments,
+                confirmedServiceIds // <-- Alteração aqui
+            );            
             
             if (result.updatedOrder) {
                 setOrder(result.updatedOrder);
@@ -216,7 +246,7 @@ export default function OsDetailPage() {
                         order.technicalSolution || '',
                         `Anexo adicionado: ${selectedFile.name}`,
                         updatedAttachments,
-                        order.confirmedServices // Pass existing confirmed services
+                        confirmedServiceIds // Pass existing confirmed services
                     );
 
                     if (result.updatedOrder) {
@@ -275,7 +305,7 @@ export default function OsDetailPage() {
                 order.technicalSolution || '',
                 `Anexo removido: ${getFileNameFromUrl(urlToDelete)}`,
                 updatedAttachments,
-                order.confirmedServices // Pass existing confirmed services
+                confirmedServiceIds // Pass existing confirmed services
             );
 
             if (result.updatedOrder) {
@@ -329,10 +359,8 @@ export default function OsDetailPage() {
 
     const showServiceConfirmation = currentStatus === 'pronta_entrega' || currentStatus === 'entregue';
 
-    const hasIncompleteServices =
-    (order.contractedServices?.webProtection && !confirmedServices.webProtection) ||
-    (order.contractedServices?.backup && !confirmedServices.backup) ||
-    (order.contractedServices?.edr && !confirmedServices.edr);
+    const hasIncompleteServices = order.contractedServices && order.contractedServices.length > 0 &&
+    order.contractedServices.some(service => !confirmedServiceIds.includes(service.id));
 
     const showAlertBanner = showServiceConfirmation && hasIncompleteServices;
 
@@ -400,15 +428,17 @@ export default function OsDetailPage() {
                 <CardHeader><CardTitle className="flex items-center gap-2"><CheckCircle /> Serviços Contratados</CardTitle></CardHeader>
                 <CardContent>
                     <div className="flex flex-wrap gap-2">
-                        {order.contractedServices?.webProtection && <Badge variant="default">WebProtection</Badge>}
-                        {order.contractedServices?.backup && <Badge variant="default">Backup</Badge>}
-                        {order.contractedServices?.edr && <Badge variant="default">EDR</Badge>}
-                        {!order.contractedServices?.webProtection && !order.contractedServices?.backup && !order.contractedServices?.edr && (
+                        {order.contractedServices && order.contractedServices.length > 0 ? (
+                            order.contractedServices.map((service: ProvidedService) => (
+                            <Badge key={service.id} variant="default">{service.name}</Badge>
+                        ))
+                        ) : (
                             <p className="text-muted-foreground">Nenhum serviço contratado registrado para este cliente.</p>
                         )}
                     </div>
                 </CardContent>
             </Card>
+
 
             {canShowUpdateCard && (
                 <Card>
@@ -454,50 +484,34 @@ export default function OsDetailPage() {
                         
                         {showServiceConfirmation && (
                             <div className="space-y-2 border p-4 rounded-md bg-yellow-50/20 dark:bg-yellow-950/20 relative">
-                                <h3 className="text-md font-semibold flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
-                                    <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                                    Confirmação de Serviços Contratados
-                                </h3>
-                                <p className="text-sm text-muted-foreground">Marque os serviços que foram instalados e confirmados para este cliente:</p>
-                                
-                                {order.contractedServices?.webProtection && (
-                                    <div className="flex items-center space-x-2">
-                                        <Checkbox 
-                                            id="confirmWebProtection" 
-                                            checked={confirmedServices.webProtection}
-                                            onCheckedChange={(checked) => setConfirmedServices(prev => ({ ...prev, webProtection: !!checked }))}
+                            <h3 className="text-md font-semibold flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+                                <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                                Confirmação de Serviços Contratados
+                            </h3>
+                            <p className="text-sm text-muted-foreground">Marque os serviços que foram instalados e confirmados para este cliente:</p>
+                        
+                            {order.contractedServices && order.contractedServices.length > 0 ? (
+                                order.contractedServices.map((service: ProvidedService) => (
+                                    <div key={service.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`confirm-${service.id}`}
+                                            checked={confirmedServiceIds.includes(service.id)}
+                                            onCheckedChange={(checked) => {
+                                                setConfirmedServiceIds(prevIds =>
+                                                    checked
+                                                        ? [...prevIds, service.id]
+                                                        : prevIds.filter(id => id !== service.id)
+                                                );
+                                            }}
                                             disabled={isUpdating || isDelivered}
                                         />
-                                        <Label htmlFor="confirmWebProtection">WebProtection instalado e confirmado</Label>
+                                        <Label htmlFor={`confirm-${service.id}`}>{service.name} instalado e confirmado</Label>
                                     </div>
-                                )}
-                                {order.contractedServices?.backup && (
-                                    <div className="flex items-center space-x-2">
-                                        <Checkbox 
-                                            id="confirmBackup" 
-                                            checked={confirmedServices.backup}
-                                            onCheckedChange={(checked) => setConfirmedServices(prev => ({ ...prev, backup: !!checked }))}
-                                            disabled={isUpdating || isDelivered}
-                                        />
-                                        <Label htmlFor="confirmBackup">Backup instalado e confirmado</Label>
-                                    </div>
-                                )}
-                                {order.contractedServices?.edr && (
-                                    <div className="flex items-center space-x-2">
-                                        <Checkbox 
-                                            id="confirmEdr" 
-                                            checked={confirmedServices.edr}
-                                            onCheckedChange={(checked) => setConfirmedServices(prev => ({ ...prev, edr: !!checked }))}
-                                            disabled={isUpdating || isDelivered}
-                                        />
-                                        <Label htmlFor="confirmEdr">EDR instalado e confirmado</Label>
-                                    </div>
-                                )}
-
-                                {!order.contractedServices?.webProtection && !order.contractedServices?.backup && !order.contractedServices?.edr && (
-                                    <p className="text-muted-foreground italic">Nenhum serviço contratado para este cliente. Nenhuma confirmação é necessária.</p>
-                                )}
-                            </div>
+                                ))
+                            ) : (
+                                <p className="text-muted-foreground italic">Nenhum serviço contratado para este cliente. Nenhuma confirmação é necessária.</p>
+                            )}
+                        </div>                        
                         )}
 
                         {canEditSolution && (
