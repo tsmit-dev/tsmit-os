@@ -1,184 +1,87 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import React from 'react';
+import { useAuth } from './auth-provider';
 import {
-  Home,
-  Users,
-  ClipboardList,
-  Scan,
-  Settings,
-  CircleHelp,
-  LogOut,
-  Briefcase,
-} from "lucide-react";
-import {
-  Sidebar,
-  SidebarCollapsible,
-  SidebarCollapsibleContent,
-  SidebarCollapsibleButton,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
-  SidebarMenuItem,
+  SidebarFooter,
   SidebarMenu,
+  SidebarMenuItem,
   SidebarMenuButton,
   SidebarSeparator,
-} from "@/components/ui/sidebar";
-import { TsmitLogo } from "./tsmit-logo";
-import { Badge } from "./ui/badge";
-import { useAuth } from "./auth-provider";
-import { usePermissions } from "@/context/PermissionsContext";
-import { useToast } from "@/hooks/use-toast";
-import QrScanner from "./qr-scanner"; // Changed to default import
-import { Permissions } from "@/lib/types"; // Import Permissions type
+  SidebarCollapsible,
+  SidebarCollapsibleButton,
+  SidebarCollapsibleContent,
+  useSidebar
+} from './ui/sidebar';
+import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, ClipboardList, LineChart, Settings, Scan, Gem } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { Badge } from './ui/badge';
+import { TsmitLogo } from './tsmit-logo';
+import { Button } from './ui/button';
+import QrScanner from './qr-scanner';
+import { Permissions } from '@/lib/types';
+import { usePermissions } from '@/context/PermissionsContext';
 
-interface SidebarNavProps {
-  isMobile: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  isOpen: boolean; // Add isOpen prop to control sidebar visibility
-}
-
-export function SidebarNav({ isMobile, onOpenChange, isOpen }: SidebarNavProps) {
+export function SidebarNav() {
+  const { user, logout } = useAuth();
+  const { hasPermission, loadingPermissions, userRole } = usePermissions();
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth(); // Changed signOut to logout
-  const { userRole, hasPermission } = usePermissions();
-  const { toast } = useToast();
+  const { isMobile, openMobile, toggleSidebar } = useSidebar();
 
-  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const handleLogout = () => {
+    logout();
+    router.push('/');
+  };
 
-  // Determine if user has access to any admin settings
-  const canAccessAdminSettings = hasPermission('adminUsers') || hasPermission('adminRoles') || hasPermission('adminServices') || hasPermission('adminReports') || hasPermission('adminSettings');
-
-  interface NavItem {
-    label: string;
-    href?: string;
-    icon: React.ElementType;
-    permission: keyof Permissions; // Explicitly type permission
-    action?: () => void;
-  }
-
-  const navItems: NavItem[] = [
-    {
-      label: "Dashboard",
-      href: "/dashboard",
-      icon: Home,
-      permission: "dashboard",
-    },
-    {
-      label: "Clientes",
-      href: "/clients",
-      icon: Users,
-      permission: "clients",
-    },
-    {
-      label: "Ordens de Serviço",
-      href: "/os",
-      icon: ClipboardList,
-      permission: "os",
-    },
-    {
-        label: "Digitalizar OS",
-        action: () => setIsQrScannerOpen(true),
-        icon: Scan,
-        permission: "os",
-    }
-  ];
-
-  const adminNavItems: NavItem[] = [
-    {
-      label: "Usuários",
-      href: "/admin/users",
-      icon: Users,
-      permission: "adminUsers",
-    },
-    {
-      label: "Cargos e Permissões",
-      href: "/admin/settings/roles",
-      icon: Settings,
-      permission: "adminRoles",
-    },
-    {
-      label: "Serviços",
-      href: "/admin/settings/services",
-      icon: Briefcase,
-      permission: "adminServices",
-    },
-    {
-      label: "Relatórios",
-      href: "/admin/reports",
-      icon: ClipboardList,
-      permission: "adminReports",
-    },
-    {
-      label: "Configurações Gerais",
-      href: "/admin/settings",
-      icon: Settings,
-      permission: "adminSettings",
-    }
-  ];
+  const [isQrScannerOpen, setIsQrScannerOpen] = React.useState(false);
 
   const handleScanSuccess = (decodedText: string) => {
-    setIsQrScannerOpen(false);
-    toast({
-        title: "OS Digitalizada",
-        description: `Código: ${decodedText}`,
-    });
+    console.log("QR Code scanned successfully:", decodedText);
     router.push(`/os/${decodedText}`);
+    setIsQrScannerOpen(false);
   };
 
-  const handleSignOut = async () => {
-    try {
-      await logout();
-      router.push('/auth');
-    } catch (error) {
-      toast({
-        title: "Erro ao sair",
-        description: "Não foi possível fazer logout. Tente novamente.",
-        variant: "destructive"
-      });
-      console.error("Logout error:", error);
-    }
-  };
+  const navItems: {
+    href: string;
+    label: string;
+    icon: React.ElementType;
+    permissionKey: keyof Permissions;
+  }[] = [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permissionKey: 'dashboard' },
+    { href: '/dashboard/ready-for-pickup', label: 'Prontas p/ Entrega', icon: PackageCheck, permissionKey: 'os' },
+    { href: '/os/new', label: 'Nova OS', icon: PlusCircle, permissionKey: 'os' },
+    { href: '/os', label: 'Todas as OS', icon: HardDrive, permissionKey: 'os' },
+    { href: '/clients', label: 'Clientes', icon: Briefcase, permissionKey: 'clients' },
+    { href: '/admin/reports', label: 'Relatórios', icon: LineChart, permissionKey: 'adminReports' },
+  ];
+
+  const visibleItems = navItems.filter(item => hasPermission(item.permissionKey));
+
+  const canAccessAdminSettings = hasPermission('adminUsers') || hasPermission('adminSettings');
 
   return (
     <>
       <SidebarHeader>
-        <Link href="/" className="flex items-center gap-2">
-          <TsmitLogo className="h-6 w-6" />
-          <h1 className="text-xl font-bold font-headline">TSMIT</h1>
+        <Link href="/dashboard" className="flex items-center gap-2 p-2">
+            <TsmitLogo className="w-28 h-auto"/>
         </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
-          {navItems.map((item) => {
-            if (!hasPermission(item.permission)) {
-                return null;
-            }
-            return (
-              <SidebarMenuItem key={item.href || item.label}>
-                <SidebarMenuButton
-                  asChild={!!item.href}
-                  onClick={item.action ? item.action : undefined}
-                  className={pathname === item.href ? "bg-muted" : ""}
-                >
-                  {item.href ? (
-                    <Link href={item.href} className="flex items-center gap-2">
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </Link>
-                  ) : (
-                    <>
-                        <item.icon className="h-4 w-4" />
+          {visibleItems.map(item => (
+            <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton asChild isActive={pathname.startsWith(item.href) && (item.href !== '/dashboard' || pathname === '/dashboard')} tooltip={item.label}>
+                    <Link href={item.href}>
+                        <item.icon />
                         <span>{item.label}</span>
-                    </>
-                  )}
+                    </Link>
                 </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          })}
+            </SidebarMenuItem>
+          ))}
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
@@ -190,45 +93,72 @@ export function SidebarNav({ isMobile, onOpenChange, isOpen }: SidebarNavProps) 
 		
 		{isQrScannerOpen && (
 		  <QrScanner
-			isOpen={isQrScannerOpen}
 			onClose={() => setIsQrScannerOpen(false)}
 			onScanSuccess={handleScanSuccess}
 		  />
 		)}
-		
+
         {canAccessAdminSettings && (
             <SidebarCollapsible defaultOpen={pathname.startsWith('/admin')}>
               <SidebarCollapsibleButton className="flex items-center gap-2"> 
-                <Settings className="h-4 w-4" />
+                <Settings className="h-4 w-4" /> {/* Explicitly set size here */}
                 <span>Configurações</span>
               </SidebarCollapsibleButton>
               <SidebarCollapsibleContent>
-                <SidebarMenu>
-                  {adminNavItems.map((item) => {
-                    if (!hasPermission(item.permission)) {
-                        return null;
-                    }
-                    return (
-                      <SidebarMenuItem key={item.href || item.label}>
-                        <SidebarMenuButton asChild>
-                          <Link href={item.href!} className={pathname === item.href ? "bg-muted flex items-center gap-2" : "flex items-center gap-2"}>
-                            <item.icon className="h-4 w-4" />
-                            <span>{item.label}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
+                <SidebarMenu> {/* Wrapped sub-items in SidebarMenu */}
+                  {hasPermission('adminUsers') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === '/admin/users'} tooltip="Gerenciamento de Usuários">
+                        <Link href="/admin/users">
+                          <Users />
+                          <span>Usuários</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                  {hasPermission('adminSettings') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings/roles'} tooltip="Gerenciamento de Cargos">
+                        <Link href="/admin/settings/roles">
+                          <Gem />
+                          <span>Cargos</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                  {hasPermission('adminSettings') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings'} tooltip="Configurações de E-mail">
+                        <Link href="/admin/settings">
+                          <Settings />
+                          <span>E-mail</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                  {hasPermission('adminSettings') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings/services'} tooltip="Serviços Fornecidos">
+                        <Link href="/admin/settings">
+                          <ClipboardList />
+                          <span>Serviços Fornecidos</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
                 </SidebarMenu>
               </SidebarCollapsibleContent>
             </SidebarCollapsible>
-        )}
-        <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleSignOut}>
-                <LogOut className="h-4 w-4" />
+          )}
+      
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleLogout} tooltip="Sair">
+                <LogOut />
                 <span>Sair</span>
             </SidebarMenuButton>
-        </SidebarMenuItem>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </>
   );
