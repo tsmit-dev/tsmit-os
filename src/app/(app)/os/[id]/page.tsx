@@ -157,10 +157,10 @@ export default function OsDetailPage() {
                     title: "Transição de Status Inválida",
                     description: `Não é possível mudar o status de "${getStatusName(oldStatus)}" para "${getStatusName(newStatus)}". Por favor, siga a ordem correta dos status.`,
                     variant: "destructive",
-                    duration: 8000, // Duração maior para dar tempo de ler
+                    duration: 8000, // Duração maior para dar tempo de ler..
                 });
                 setCurrentStatus(oldStatus); // Reverte a seleção no dropdown para o status original
-                return; // Impede a atualização
+                return; // Impede a atualização 
             }
         }
         // =================================================================
