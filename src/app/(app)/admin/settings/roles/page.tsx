@@ -36,7 +36,6 @@ const defaultPermissions: Permissions = {
   os: false,
   adminReports: false,
   adminUsers: false,
-  adminRoles: false,
   adminServices: false,
   adminSettings: false,
 };

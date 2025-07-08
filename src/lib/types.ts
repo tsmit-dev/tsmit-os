@@ -4,8 +4,7 @@ export interface Permissions {
   os: boolean;
   adminReports: boolean;
   adminUsers: boolean;
-  adminRoles: boolean;
-  adminServices: boolean; // Permissão para a nova página de serviços
+  adminServices: boolean;
   adminSettings: boolean;
 }
 
