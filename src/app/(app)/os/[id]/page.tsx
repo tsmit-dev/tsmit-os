@@ -34,6 +34,7 @@ export default function OsDetailPage() {
     const router = useRouter();
 
     const [order, setOrder] = useState<ServiceOrder | null>(null);
+    const isDelivered = order?.status === 'entregue';
     const [loadingOrder, setLoadingOrder] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
     const [currentStatus, setCurrentStatus] = useState<ServiceOrderStatus | undefined>();
@@ -387,7 +388,7 @@ export default function OsDetailPage() {
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 {canEditOsDetails && (
-                    <Button variant="outline" onClick={() => setIsEditOsDialogOpen(true)}>
+                    <Button variant="outline" onClick={() => setIsEditOsDialogOpen(true)} disabled={isDelivered}>
                         <Edit className="mr-2 h-4 w-4" />
                         Editar OS
                     </Button>
@@ -470,8 +471,9 @@ export default function OsDetailPage() {
                                 <Select
                                     value={currentStatus}
                                     onValueChange={(v: ServiceOrderStatus) => setCurrentStatus(v)}
-                                    disabled={isUpdating}
+                                    disabled={isUpdating || isDelivered}
                                 >
+
                                     <SelectTrigger className="w-full sm:w-[280px]">
                                         <SelectValue placeholder="Selecione o status" />
                                     </SelectTrigger>
@@ -507,7 +509,7 @@ export default function OsDetailPage() {
                                             id="confirmWebProtection" 
                                             checked={confirmedServices.webProtection}
                                             onCheckedChange={(checked) => setConfirmedServices(prev => ({ ...prev, webProtection: !!checked }))}
-                                            disabled={isUpdating}
+                                            disabled={isUpdating || isDelivered}
                                         />
                                         <Label htmlFor="confirmWebProtection">WebProtection instalado e confirmado</Label>
                                     </div>
@@ -518,7 +520,7 @@ export default function OsDetailPage() {
                                             id="confirmBackup" 
                                             checked={confirmedServices.backup}
                                             onCheckedChange={(checked) => setConfirmedServices(prev => ({ ...prev, backup: !!checked }))}
-                                            disabled={isUpdating}
+                                            disabled={isUpdating || isDelivered}
                                         />
                                         <Label htmlFor="confirmBackup">Backup instalado e confirmado</Label>
                                     </div>
@@ -529,7 +531,7 @@ export default function OsDetailPage() {
                                             id="confirmEdr" 
                                             checked={confirmedServices.edr}
                                             onCheckedChange={(checked) => setConfirmedServices(prev => ({ ...prev, edr: !!checked }))}
-                                            disabled={isUpdating}
+                                            disabled={isUpdating || isDelivered}
                                         />
                                         <Label htmlFor="confirmEdr">EDR instalado e confirmado</Label>
                                     </div>
@@ -549,13 +551,13 @@ export default function OsDetailPage() {
                                     onChange={(e) => handleTechnicalSolutionChange(e.target.value)}
                                     rows={6}
                                     placeholder="Descreva a solução técnica ou adicione uma nota. Este texto será salvo no histórico."
-                                    disabled={isUpdating || !canEditSolution}
+                                    disabled={isUpdating || !canEditSolution || isDelivered}
                                 />
                             </div>
                         )}
                         <Button 
                             onClick={handleUpdate} 
-                            disabled={isUpdating || !canChangeStatus || (showServiceConfirmation && hasIncompleteServices)}
+                            disabled={isUpdating || !canChangeStatus || (showServiceConfirmation && hasIncompleteServices) || isDelivered}
                         >
                             {isUpdating ? 'Salvando...' : 'Salvar Alterações'}
                         </Button>
@@ -580,12 +582,12 @@ export default function OsDetailPage() {
                                 type="file" 
                                 className="max-w-xs"
                                 onChange={handleFileChange}
-                                disabled={uploading > 0 || !canUploadAttachment}
+                                disabled={uploading > 0 || !canUploadAttachment || isDelivered}
                                 ref={fileInputRef}
                             />
                             <Button 
                                 onClick={handleUploadFile} 
-                                disabled={!selectedFile || uploading > 0 || !canUploadAttachment}
+                                disabled={!selectedFile || uploading > 0 || !canUploadAttachment || isDelivered}
                             >
                                 {uploading > 0 ? `Enviando (${Math.round(uploadProgress)}%)` : 'Enviar Anexo'}
                                 {uploading > 0 ? null : <Upload className="ml-2 h-4 w-4" />}
