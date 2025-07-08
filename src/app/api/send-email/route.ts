@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { ServiceOrder, Client, EmailSettings } from '@/lib/types';
-import { adminDb } from '@/lib/firebaseAdmin';
+import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
 /**
@@ -19,21 +19,19 @@ async function sendEmail(
 ) {
   const { smtpServer, smtpPort, smtpSecurity, senderEmail, smtpPassword } = emailSettings;
 
-  console.log('Email Settings being used:', { smtpServer, smtpPort, smtpSecurity, senderEmail: senderEmail ? '[REDACTED]' : 'N/A' });
-
   if (!smtpServer || !senderEmail || !smtpPassword) {
-    console.error('Configurações de SMTP incompletas detectadas:', { smtpServer, senderEmail: senderEmail ? '[REDACTED]' : 'N/A', smtpPassword: smtpPassword ? '[REDACTED]' : 'N/A' });
     throw new Error('Configurações de SMTP incompletas no banco de dados.');
   }
 
+  // Determine secure option based on SMTP_PORT and SMTP_SECURITY
+  // Nodemailer's 'secure' option: true for 465 (SMTPS), false for other ports (like 587 with STARTTLS)
   const secureConnection = smtpPort === 465 || smtpSecurity === 'ssl' || smtpSecurity === 'ssltls';
+  // Nodemailer's 'requireTLS' option: true to enforce STARTTLS
   const requireStartTLS = smtpPort === 587 && (smtpSecurity === 'starttls' || smtpSecurity === 'tls');
-
-  console.log('Nodemailer transporter options:', { host: smtpServer, port: smtpPort || 587, secure: secureConnection, requireTLS: requireStartTLS });
 
   const transporter = nodemailer.createTransport({
     host: smtpServer,
-    port: smtpPort || 587,
+    port: smtpPort || 587, // Default to 587 if not specified
     secure: secureConnection,
     requireTLS: requireStartTLS,
     auth: {
@@ -41,6 +39,8 @@ async function sendEmail(
       pass: smtpPassword,
     },
     tls: {
+      // It's recommended to set rejectUnauthorized to true in production
+      // if you are using a valid certificate.
       rejectUnauthorized: false
     }
   });
@@ -59,32 +59,28 @@ export async function POST(request: Request) {
   try {
     const { serviceOrder, client }: { serviceOrder: ServiceOrder; client: Client } = await request.json();
 
-    console.log('Received POST request for send-email. Service Order ID:', serviceOrder?.id, 'Client ID:', client?.id);
-
     if (!serviceOrder || !client) {
-      console.error('Dados da ordem de serviço ou cliente ausentes na requisição.');
       return NextResponse.json({ message: 'Dados da ordem de serviço ou cliente ausentes.' }, { status: 400 });
     }
 
+    // Determine the recipient email, prioritizing client email
     const recipientEmail = client.email || serviceOrder.collaborator.email;
 
     if (!recipientEmail) {
-      console.error('Nenhum e-mail de destinatário válido fornecido para o cliente ou colaborador.');
       return NextResponse.json({ message: 'Nenhum e-mail de destinatário válido fornecido para o cliente ou colaborador.' }, { status: 400 });
     }
-    console.log('Recipient Email:', recipientEmail);
 
-    const settingsDocRef = adminDb.collection('settings').doc('email');
-    const settingsSnap = await settingsDocRef.get();
+    // Fetch email settings from Firestore
+    const settingsDocRef = doc(db, 'settings', 'email');
+    const settingsSnap = await getDoc(settingsDocRef);
 
-    if (!settingsSnap.exists) {
-      console.error('Configurações de e-mail não encontradas no banco de dados (documento settings/email).');
+    if (!settingsSnap.exists()) {
       return NextResponse.json({ message: 'Configurações de e-mail não encontradas no banco de dados.' }, { status: 500 });
     }
 
     const emailSettings = settingsSnap.data() as EmailSettings;
-    console.log('Fetched Email Settings from Firestore:', emailSettings);
 
+    // Construct the email content and subject specific to the "Entregue" status
     const subject = `Atualização da Ordem de Serviço ${serviceOrder.orderNumber} - Status: Entregue`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -108,15 +104,15 @@ export async function POST(request: Request) {
       </div>
     `;
 
+    // Call the refactored sendEmail function
     await sendEmail(recipientEmail, subject, htmlContent, emailSettings);
 
     return NextResponse.json({ message: 'E-mail de notificação enviado com sucesso.' });
-  } catch (error: unknown) {
-    console.error('Erro geral na rota /api/send-email:', error);
-    return NextResponse.json({
-      message: 'Erro ao enviar e-mail de notificação.',
-      error: (error instanceof Error) ? error.message : String(error),
-      detailedError: (error instanceof Error) ? error.stack : undefined // Para obter o stack trace
+  } catch (error) {
+    console.error('Erro ao enviar e-mail de notificação:', error);
+    return NextResponse.json({ 
+      message: 'Erro ao enviar e-mail de notificação.', 
+      error: (error instanceof Error) ? error.message : String(error) 
     }, { status: 500 });
   }
 }
