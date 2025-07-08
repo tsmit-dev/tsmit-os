@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { ServiceOrder, Client, EmailSettings } from '@/lib/types';
-import { db } from '@/lib/firebase';
+import { adminDb } from '@/lib/firebaseAdmin';
 import { doc, getDoc } from 'firebase/firestore';
 
 /**
@@ -74,10 +74,10 @@ export async function POST(request: Request) {
     }
     console.log('Recipient Email:', recipientEmail);
 
-    const settingsDocRef = doc(db, 'settings', 'email');
-    const settingsSnap = await getDoc(settingsDocRef);
+    const settingsDocRef = adminDb.collection('settings').doc('email');
+    const settingsSnap = await settingsDocRef.get();
 
-    if (!settingsSnap.exists()) {
+    if (!settingsSnap.exists) {
       console.error('Configurações de e-mail não encontradas no banco de dados (documento settings/email).');
       return NextResponse.json({ message: 'Configurações de e-mail não encontradas no banco de dados.' }, { status: 500 });
     }

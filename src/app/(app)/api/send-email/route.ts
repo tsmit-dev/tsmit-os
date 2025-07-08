@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { ServiceOrder, Client, EmailSettings } from '@/lib/types';
-import { adminDb } from '@/lib/firebaseAdmin'; // Importa adminDb do Firebase Admin SDK
+import { dbAdmin } from '@/lib/firebaseAdmin'; // Importa adminDb do Firebase Admin SDK
 
 /**
  * Sends an email using the provided settings.
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     console.log('Recipient Email:', recipientEmail);
 
     // Usa adminDb para acessar o Firestore com privilégios de administrador
-    const settingsDocRef = adminDb.collection('settings').doc('email');
+    const settingsDocRef = dbAdmin.collection('settings').doc('email');
     const settingsSnap = await settingsDocRef.get();
 
     if (!settingsSnap.exists) {
