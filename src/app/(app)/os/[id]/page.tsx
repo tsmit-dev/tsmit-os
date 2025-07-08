@@ -119,16 +119,60 @@ export default function OsDetailPage() {
             });
             return;
         }
-
-        const oldStatus = order.status; // Store old status before potential update
-
-        // Validation for "Pronta para Entrega" and "Entregue" status
-        const isReadyForDeliveryOrDelivered = currentStatus === 'pronta_entrega' || currentStatus === 'entregue';
+    
+        const oldStatus = order.status;
+        const newStatus = currentStatus;
+    
+        // =================================================================
+        // =========== INÍCIO DA NOVA LÓGICA DE VALIDAÇÃO DE STATUS =========
+        // =================================================================
+        if (newStatus !== oldStatus && !hasPermission('adminSettings')) { // Apenas valida se o status mudou e o usuário não é admin
+            const statusOrder: ServiceOrderStatus[] = ['aberta', 'em_analise', 'pronta_entrega', 'entregue'];
+            const oldIndex = statusOrder.indexOf(oldStatus);
+            const newIndex = statusOrder.indexOf(newStatus);
+    
+            let isValidTransition = false;
+            const isMovingToSpecialStatus = newStatus === 'aguardando_peca' || newStatus === 'aguardando_terceiros';
+            const isMovingFromSpecialStatus = oldStatus === 'aguardando_peca' || oldStatus === 'aguardando_terceiros';
+    
+            if (isMovingToSpecialStatus) {
+                // Permite mover para "Aguardando Peça/Terceiros" apenas a partir de "Em Análise"
+                if (oldStatus === 'em_analise') {
+                    isValidTransition = true;
+                }
+            } else if (isMovingFromSpecialStatus) {
+                // Permite mover de "Aguardando Peça/Terceiros" apenas de volta para "Em Análise"
+                if (newStatus === 'em_analise') {
+                    isValidTransition = true;
+                }
+            } else if (oldIndex !== -1 && newIndex !== -1) {
+                // Para status padrão, a transição deve ser sequencial (ex: de índice 1 para 2)
+                if (newIndex === oldIndex + 1) {
+                    isValidTransition = true;
+                }
+            }
+    
+            if (!isValidTransition) {
+                toast({
+                    title: "Transição de Status Inválida",
+                    description: `Não é possível mudar o status de "${getStatusName(oldStatus)}" para "${getStatusName(newStatus)}". Por favor, siga a ordem correta dos status.`,
+                    variant: "destructive",
+                    duration: 8000, // Duração maior para dar tempo de ler
+                });
+                setCurrentStatus(oldStatus); // Reverte a seleção no dropdown para o status original
+                return; // Impede a atualização
+            }
+        }
+        // =================================================================
+        // ============ FIM DA NOVA LÓGICA DE VALIDAÇÃO DE STATUS ===========
+        // =================================================================
+    
         const allContractedServicesConfirmed = order.contractedServices?.every(service =>
             confirmedServiceIds.includes(service.id)
         ) ?? true;
-
-
+            
+        const isReadyForDeliveryOrDelivered = newStatus === 'pronta_entrega' || newStatus === 'entregue';
+    
         if (isReadyForDeliveryOrDelivered && !allContractedServicesConfirmed) {
             toast({
                 title: "Serviços Contratados Pendentes",
@@ -137,8 +181,8 @@ export default function OsDetailPage() {
             });
             return;
         }
-
-        if (currentStatus === order.status && technicalSolution === (order.technicalSolution || '') && JSON.stringify(confirmedServiceIds.sort()) === JSON.stringify((order.confirmedServiceIds || []).sort())) {
+    
+        if (newStatus === oldStatus && technicalSolution === (order.technicalSolution || '') && JSON.stringify(confirmedServiceIds.sort()) === JSON.stringify((order.confirmedServiceIds || []).sort())) {
             toast({ title: "Nenhuma alteração", description: "Nenhuma alteração para salvar." });
             return;
         }
@@ -146,26 +190,24 @@ export default function OsDetailPage() {
         setIsUpdating(true);
         try {
             const result = await updateServiceOrder(
-                order.id,
-                currentStatus,
+                order.id, 
+                newStatus,
                 user.name,
                 technicalSolution,
                 technicalSolution.trim() ? `Nota/Solução: ${technicalSolution}` : undefined,
                 order.attachments,
-                confirmedServiceIds // <-- Alteração aqui
-            );            
+                confirmedServiceIds
+            );
             
             if (result.updatedOrder) {
                 setOrder(result.updatedOrder);
                 toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
-
-                // Clear technicalSolution if status changed
-                if (currentStatus !== oldStatus) {
-                    setTechnicalSolution(''); // Clear the field
+    
+                if (newStatus !== oldStatus) {
+                    setTechnicalSolution('');
                 }
-
-                // Handle email notification result
-                if (result.updatedOrder.status === 'entregue' && currentStatus !== oldStatus) { 
+    
+                if (result.updatedOrder.status === 'entregue' && newStatus !== oldStatus) { 
                     if (result.emailSent) {
                         toast({ title: "Notificação de E-mail", description: "E-mail de notificação enviado ao cliente." });
                     } else if (result.emailErrorMessage) {
@@ -193,7 +235,7 @@ export default function OsDetailPage() {
             setIsUpdating(false);
         }
     };
-
+    
     const handleTechnicalSolutionChange = (newSolution: string) => {
         setTechnicalSolution(newSolution);
     }
@@ -347,6 +389,18 @@ export default function OsDetailPage() {
         }
     };
 
+    const getStatusName = (status: ServiceOrderStatus) => {
+        const names: Record<ServiceOrderStatus, string> = {
+            aberta: "Aberta",
+            em_analise: "Em Análise",
+            aguardando_peca: "Aguardando Peça",
+            aguardando_terceiros: "Aguardando Terceiros",
+            pronta_entrega: "Pronta para Entrega",
+            entregue: "Entregue",
+        };
+        return names[status] || status;
+    };
+    
     if (loadingPermissions || !hasPermission('os') || loadingOrder) return <OsDetailSkeleton />;
 
     if (!order) return <p>Ordem de Serviço não encontrada.</p>;
