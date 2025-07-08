@@ -228,9 +228,6 @@ export function EmailSettingsForm() {
               <FormControl>
                 <Input type="password" {...field} placeholder="Sua senha SMTP" disabled={isSaving || !canEditSettings} />
               </FormControl>
-              <FormDescription>
-                Em um ambiente de produção, a senha SMTP deve ser armazenada de forma segura (ex: variáveis de ambiente).
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
