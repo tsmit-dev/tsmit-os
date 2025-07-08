@@ -150,7 +150,7 @@ export function SidebarNav() {
               </SidebarCollapsibleContent>
             </SidebarCollapsible>
           )}
-      
+        <SidebarSeparator />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout} tooltip="Sair">
