@@ -139,7 +139,7 @@ export function SidebarNav() {
                   {hasPermission('adminSettings') && (
                     <SidebarMenuItem>
                       <SidebarMenuButton asChild isActive={pathname === '/admin/settings/services'} tooltip="Serviços Fornecidos">
-                        <Link href="/admin/settings">
+                        <Link href="/admin/settings/services">
                           <ClipboardList />
                           <span>Serviços Fornecidos</span>
                         </Link>
