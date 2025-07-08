@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Client } from "@/lib/types";
-import { addClient, updateClient, deleteClient, ClientData } from "@/lib/data";
+import { useState, useEffect } from "react";
+import { Client, ProvidedService } from "@/lib/types";
+import { addClient, updateClient, deleteClient, getProvidedServices } from "@/lib/data";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -39,40 +39,59 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "./ui/form";
 import { Input } from "./ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2 } from "lucide-react";
-import { Checkbox } from "./ui/checkbox"; // Import Checkbox
+import { PlusCircle, Edit, Trash2, Loader2 } from "lucide-react";
+import { Checkbox } from "./ui/checkbox";
+import { Badge } from "./ui/badge";
 
 interface ClientsTableProps {
   clients: Client[];
   onClientChange: () => void;
 }
 
+// Updated schema to handle dynamic services
 const formSchema = z.object({
   name: z.string().min(2, "Nome do cliente é obrigatório."),
   cnpj: z.string().optional(),
   address: z.string().optional(),
-  webProtection: z.boolean().default(false).optional(),
-  backup: z.boolean().default(false).optional(),
-  edr: z.boolean().default(false).optional(),
+  email: z.string().email({ message: "Por favor, insira um email válido." }).optional().or(z.literal('')),
+  contractedServiceIds: z.array(z.string()).default([]),
 });
+
+type ClientFormData = z.infer<typeof formSchema>;
 
 export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
   const { toast } = useToast();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [providedServices, setProvidedServices] = useState<ProvidedService[]>([]);
+  const [loadingServices, setLoadingServices] = useState(true);
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<ClientFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
         name: '',
         cnpj: '',
         address: '',
-        webProtection: false,
-        backup: false,
-        edr: false,
+        email: '',
+        contractedServiceIds: [],
     }
   });
+
+  // Fetch provided services when the component mounts
+  useEffect(() => {
+    async function fetchServices() {
+        try {
+            const services = await getProvidedServices();
+            setProvidedServices(services);
+        } catch (error) {
+            toast({ title: "Erro", description: "Falha ao carregar os serviços disponíveis.", variant: "destructive" });
+        } finally {
+            setLoadingServices(false);
+        }
+    }
+    fetchServices();
+  }, [toast]);
 
   const handleOpenSheet = (client: Client | null) => {
     setEditingClient(client);
@@ -80,30 +99,20 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
         name: client.name, 
         cnpj: client.cnpj || '', 
         address: client.address || '', 
-        webProtection: client.webProtection || false,
-        backup: client.backup || false,
-        edr: client.edr || false,
-    } : { name: '', cnpj: '', address: '', webProtection: false, backup: false, edr: false });
+        email: client.email || '',
+        contractedServiceIds: client.contractedServiceIds || [],
+    } : { name: '', cnpj: '', address: '', email: '', contractedServiceIds: [] });
     form.clearErrors();
     setIsSheetOpen(true);
   };
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: ClientFormData) => {
     try {
-      const clientData: ClientData = {
-        name: values.name,
-        cnpj: values.cnpj,
-        address: values.address,
-        webProtection: values.webProtection,
-        backup: values.backup,
-        edr: values.edr,
-      };
-
       if (editingClient) {
-        await updateClient(editingClient.id, clientData);
+        await updateClient(editingClient.id, values);
         toast({ title: "Sucesso", description: "Cliente atualizado." });
       } else {
-        await addClient(clientData);
+        await addClient(values);
         toast({ title: "Sucesso", description: "Cliente criado." });
       }
       setIsSheetOpen(false);
@@ -120,11 +129,13 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
         toast({ title: "Sucesso", description: "Cliente deletado."});
         onClientChange();
     } catch (error) {
-        toast({ title: "Erro", description: "Não foi possível deletar o cliente. Verifique se ele não possui OS vinculadas.", variant: "destructive"});
+        toast({ title: "Erro", description: "Não foi possível deletar o cliente.", variant: "destructive"});
     } finally {
         setClientToDelete(null);
     }
   }
+  
+  const servicesMap = new Map(providedServices.map(s => [s.id, s.name]));
 
   return (
     <>
@@ -133,7 +144,7 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
            <div className="flex justify-between items-center">
              <CardTitle>Clientes Cadastrados</CardTitle>
              <Button onClick={() => handleOpenSheet(null)}>
-                <PlusCircle />
+                <PlusCircle className="mr-2 h-4 w-4" />
                 <span>Adicionar Cliente</span>
              </Button>
            </div>
@@ -143,9 +154,9 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome da Empresa/Cliente</TableHead>
-                  <TableHead>CNPJ</TableHead>
-                  <TableHead className="hidden md:table-cell">Endereço</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Serviços Contratados</TableHead>
+                  <TableHead className="hidden md:table-cell">CNPJ</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -154,8 +165,18 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
                   clients.map((client) => (
                     <TableRow key={client.id}>
                       <TableCell className="font-medium">{client.name}</TableCell>
-                      <TableCell>{client.cnpj || 'N/A'}</TableCell>
-                      <TableCell className="hidden md:table-cell">{client.address || 'N/A'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                            {(client.contractedServiceIds && client.contractedServiceIds.length > 0) ? (
+                                client.contractedServiceIds.map(id => (
+                                    <Badge key={id} variant="secondary">{servicesMap.get(id) || 'Serviço desconhecido'}</Badge>
+                                ))
+                            ) : (
+                                <span className="text-xs text-muted-foreground">Nenhum</span>
+                            )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">{client.cnpj || 'N/A'}</TableCell>
                       <TableCell className="text-right space-x-2">
                         <Button variant="outline" size="icon" onClick={() => handleOpenSheet(client)}>
                           <Edit className="h-4 w-4" />
@@ -202,13 +223,16 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
           <SheetHeader>
             <SheetTitle>{editingClient ? "Editar Cliente" : "Criar Novo Cliente"}</SheetTitle>
             <SheetDescription>
-              {editingClient ? "Altere os dados do cliente." : "Preencha os dados para criar um novo cliente."}
+              {editingClient ? "Altere os dados do cliente e os serviços contratados." : "Preencha os dados para criar um novo cliente."}
             </SheetDescription>
           </SheetHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-6">
                <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem><FormLabel>Nome da Empresa/Cliente</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+               )} />
+               <FormField control={form.control} name="email" render={({ field }) => (
+                  <FormItem><FormLabel>Email (Opcional)</FormLabel><FormControl><Input {...field} placeholder="email@cliente.com" /></FormControl><FormMessage /></FormItem>
                )} />
                <FormField control={form.control} name="cnpj" render={({ field }) => (
                   <FormItem><FormLabel>CNPJ (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -216,70 +240,56 @@ export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
                <FormField control={form.control} name="address" render={({ field }) => (
                   <FormItem><FormLabel>Endereço (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                )} />
-
-               <div className="space-y-2">
-                    <h3 className="text-lg font-semibold">Serviços Contratados</h3>
-                    <FormField
-                        control={form.control}
-                        name="webProtection"
-                        render={({ field }) => (
-                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
-                                <FormControl>
-                                    <Checkbox
-                                        checked={field.value}
-                                        onCheckedChange={field.onChange}
-                                    />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                    <FormLabel>WebProtection</FormLabel>
-                                    <FormDescription>
-                                        Marque se o cliente contratou o serviço de WebProtection.
-                                    </FormDescription>
-                                </div>
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="backup"
-                        render={({ field }) => (
-                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
-                                <FormControl>
-                                    <Checkbox
-                                        checked={field.value}
-                                        onCheckedChange={field.onChange}
-                                    />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                    <FormLabel>Backup</FormLabel>
-                                    <FormDescription>
-                                        Marque se o cliente contratou o serviço de Backup.
-                                    </FormDescription>
-                                </div>
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="edr"
-                        render={({ field }) => (
-                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
-                                <FormControl>
-                                    <Checkbox
-                                        checked={field.value}
-                                        onCheckedChange={field.onChange}
-                                    />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                    <FormLabel>EDR</FormLabel>
-                                    <FormDescription>
-                                        Marque se o cliente contratou o serviço de EDR.
-                                    </FormDescription>
-                                </div>
-                            </FormItem>
-                        )}
-                    />
-               </div>
+               
+                <FormField
+                    control={form.control}
+                    name="contractedServiceIds"
+                    render={() => (
+                        <FormItem>
+                            <div className="mb-4">
+                                <FormLabel className="text-base">Serviços Contratados</FormLabel>
+                                <FormDescription>
+                                    Selecione os serviços que este cliente possui.
+                                </FormDescription>
+                            </div>
+                            {loadingServices ? <Loader2 className="animate-spin" /> :
+                                providedServices.map((service) => (
+                                <FormField
+                                    key={service.id}
+                                    control={form.control}
+                                    name="contractedServiceIds"
+                                    render={({ field }) => {
+                                    return (
+                                        <FormItem
+                                        key={service.id}
+                                        className="flex flex-row items-start space-x-3 space-y-0"
+                                        >
+                                        <FormControl>
+                                            <Checkbox
+                                                checked={field.value?.includes(service.id)}
+                                                onCheckedChange={(checked) => {
+                                                    return checked
+                                                    ? field.onChange([...(field.value || []), service.id])
+                                                    : field.onChange(
+                                                        field.value?.filter(
+                                                            (value) => value !== service.id
+                                                        )
+                                                        )
+                                                }}
+                                            />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">
+                                            {service.name}
+                                        </FormLabel>
+                                        </FormItem>
+                                    )
+                                    }}
+                                />
+                                ))}
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
 
               <SheetFooter>
                 <SheetClose asChild><Button type="button" variant="ghost">Cancelar</Button></SheetClose>

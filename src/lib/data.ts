@@ -20,10 +20,10 @@
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  */
 "use client"
-import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions, UpdateServiceOrderResult, ContractedServices, EditLogEntry, EditLogChange } from "./types";
+import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions, UpdateServiceOrderResult, ProvidedService, EditLogEntry, EditLogChange } from "./types";
 import { db, auth } from "./firebase"; 
-import { collection, getDocs, getDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit, runTransaction, arrayUnion, setDoc, addDoc } from "firebase/firestore"; 
-import { createUserWithEmailAndPassword, deleteUser as deleteAuthUser, sendPasswordResetEmail } from "firebase/auth"; // Import specific auth functions
+import { collection, getDocs, getDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit, runTransaction, arrayUnion, setDoc, addDoc, writeBatch } from "firebase/firestore"; 
+import { createUserWithEmailAndPassword, deleteUser as deleteAuthUser, sendPasswordResetEmail } from "firebase/auth";
 
 
 // --- ROLES ---
@@ -95,7 +95,7 @@ export const getUsers = async (): Promise<User[]> => {
                 rolesMap.set(user.roleId, role);
             }
         }
-        user.role = rolesMap.get(user.roleId) || null; // Fix: Ensure role is null if not found
+        user.role = rolesMap.get(user.roleId) || null;
         users.push(user);
     }
     return users;
@@ -111,7 +111,7 @@ export const getUserById = async (id: string): Promise<User | null> => {
         const user: User = { ...userData, id: userSnap.id };
 
         if (user.roleId) {
-            user.role = (await getRoleById(user.roleId)) || null; // Fix: Ensure role is null if not found
+            user.role = (await getRoleById(user.roleId)) || null;
         }
         return user;
     }
@@ -121,7 +121,7 @@ export const getUserById = async (id: string): Promise<User | null> => {
 export type UserData = {
     name: string;
     email: string;
-    roleId: string; // Changed to roleId
+    roleId: string;
 };
 
 export const registerUser = async (data: Omit<UserData, 'password'>, password: string): Promise<User> => {
@@ -133,12 +133,12 @@ export const registerUser = async (data: Omit<UserData, 'password'>, password: s
         await setDoc(doc(db, "users", newUserUid), {
             name: data.name,
             email: data.email,
-            roleId: data.roleId, // Changed to roleId
+            roleId: data.roleId,
             createdAt: new Date(),
         });
 
         const role = await getRoleById(data.roleId);
-        return { ...data, id: newUserUid, role: role || null } as User; // Fix: Ensure role is null here too
+        return { ...data, id: newUserUid, role: role || null } as User;
     } catch (error: any) {
         console.error("Erro no registro de usuário (frontend):", error);
         throw new Error(error.message || "Ocorreu um erro ao registrar o usuário.");
@@ -156,7 +156,7 @@ export const updateUser = async (id: string, data: Partial<UserData>): Promise<U
         const updatedUser: User = { ...updatedUserData, id: updatedSnap.id };
 
         if (updatedUser.roleId) {
-            updatedUser.role = (await getRoleById(updatedUser.roleId)) || null; // Fix: Ensure role is null if not found
+            updatedUser.role = (await getRoleById(updatedUser.roleId)) || null;
         }
         return updatedUser;
     }
@@ -227,50 +227,75 @@ export const deleteClient = async (id: string): Promise<boolean> => {
     }
 };
 
+// --- PROVIDED SERVICES ---
+
+export const getProvidedServices = async (): Promise<ProvidedService[]> => {
+    const servicesCollection = collection(db, "providedServices");
+    const q = query(servicesCollection, orderBy("name", "asc"));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ProvidedService[];
+};
+
+export const addProvidedService = async (data: Omit<ProvidedService, 'id'>): Promise<ProvidedService> => {
+    const servicesCollection = collection(db, "providedServices");
+    const newServiceRef = await addDoc(servicesCollection, data);
+    return { ...data, id: newServiceRef.id } as ProvidedService;
+};
+
+export const deleteProvidedService = async (id: string): Promise<boolean> => {
+    const serviceDocRef = doc(db, "providedServices", id);
+    try {
+        await deleteDoc(serviceDocRef);
+        return true;
+    } catch (error) {
+        console.error("Error deleting provided service:", error);
+        return false;
+    }
+};
+
+export const assignServiceToClients = async (serviceId: string, clientIds: string[]): Promise<void> => {
+    const batch = writeBatch(db);
+    clientIds.forEach(clientId => {
+        const clientRef = doc(db, 'clients', clientId);
+        batch.update(clientRef, {
+            contractedServiceIds: arrayUnion(serviceId)
+        });
+    });
+    await batch.commit();
+};
+
 
 // --- SERVICE ORDERS ---
 
 export const getServiceOrders = async (): Promise<ServiceOrder[]> => {
-    // 1. Fetch all clients and create a map for quick lookups
     const clients = await getClients();
-    const clientMap = new Map<string, Client>(); // Change to store full client object
-    clients.forEach(client => {
-        clientMap.set(client.id, client);
-    });
+    const clientMap = new Map<string, Client>(clients.map(c => [c.id, c]));
 
-    // 2. Fetch all service orders
     const serviceOrdersCollection = collection(db, "serviceOrders");
     const q = query(serviceOrdersCollection, orderBy("createdAt", "desc"));
     const querySnapshot = await getDocs(q);
 
-    // 3. Map orders and efficiently look up client names and contracted services from the map
-    const serviceOrdersData = querySnapshot.docs.map(doc => {
-        const order = {
-            ...doc.data(),
-            id: doc.id,
-        } as ServiceOrder;
-
+    return querySnapshot.docs.map(doc => {
+        const order = { ...doc.data(), id: doc.id } as ServiceOrder;
         const client = clientMap.get(order.clientId);
 
         return {
             ...order,
             clientName: client ? client.name : 'Cliente não encontrado',
-            contractedServices: client ? { // Set contracted services from client profile
-                webProtection: client.webProtection || false,
-                backup: client.backup || false,
-                edr: client.edr || false,
-            } : { webProtection: false, backup: false, edr: false },
-            // Ensure createdAt and log timestamps are Date objects for consistency
             createdAt: order.createdAt instanceof Date ? order.createdAt : (order.createdAt as any).toDate(),
             logs: order.logs.map(log => ({
                 ...log,
                 timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
             })),
-            attachments: order.attachments || [] // Ensure attachments is an empty array if undefined
+            attachments: order.attachments || [],
+            contractedServices: order.contractedServices || [],
+            confirmedServiceIds: order.confirmedServiceIds || [],
+            editLogs: order.editLogs?.map(log => ({
+                ...log,
+                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+            })) || []
         };
     });
-    
-    return serviceOrdersData;
 };
 
 export const getServiceOrderById = async (id: string): Promise<ServiceOrder | null> => {
@@ -285,18 +310,14 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
             ...orderData, 
             id: serviceOrderSnap.id,
             clientName: client ? client.name : 'Cliente não encontrado',
-            contractedServices: client ? { // Set contracted services from client profile
-                webProtection: client.webProtection || false,
-                backup: client.backup || false,
-                edr: client.edr || false,
-            } : { webProtection: false, backup: false, edr: false },
-            // Ensure createdAt and log timestamps are Date objects
             createdAt: orderData.createdAt instanceof Date ? orderData.createdAt : (orderData.createdAt as any).toDate(),
             logs: orderData.logs.map(log => ({
                 ...log,
                 timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
             })),
-            attachments: orderData.attachments || [], // Ensure attachments is an empty array if undefined
+            attachments: orderData.attachments || [],
+            contractedServices: orderData.contractedServices || [],
+            confirmedServiceIds: orderData.confirmedServiceIds || [],
             editLogs: orderData.editLogs?.map(log => ({
                 ...log,
                 timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
@@ -307,9 +328,8 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
     return null;
 };
 
-// Define a type for the updatable fields of a ServiceOrder (excluding read-only fields)
-export type UpdateServiceOrderDetailsData = Partial<Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServices' | 'analyst' | 'editLogs'>> & {
-    collaborator?: { // Make sure collaborator and equipment are properly defined if they're partial
+export type UpdateServiceOrderDetailsData = Partial<Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServiceIds' | 'analyst' | 'editLogs'>> & {
+    collaborator?: {
         name?: string;
         email?: string;
         phone?: string;
@@ -332,14 +352,12 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
 
     const oldOrderData = currentOrderSnap.data() as ServiceOrder;
 
-    // Prevent modification if status is 'entregue'
     if (oldOrderData.status === 'entregue') {
         throw new Error("OS não pode ser modificada após o status 'Entregue'.");
     }
 
     const changes: EditLogChange[] = [];
 
-    // Helper to compare fields, including nested objects like 'collaborator' and 'equipment'
     const compareField = (fieldName: string, oldVal: any, newVal: any) => {
         if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
             changes.push({
@@ -350,20 +368,16 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
         }
     };
 
-    // Compare top-level fields
     compareField('clientId', oldOrderData.clientId, data.clientId);
     compareField('reportedProblem', oldOrderData.reportedProblem, data.reportedProblem);
     compareField('technicalSolution', oldOrderData.technicalSolution, data.technicalSolution);
 
-
-    // Compare nested collaborator fields
     if (data.collaborator) {
         compareField('collaborator.name', oldOrderData.collaborator.name, data.collaborator.name);
         compareField('collaborator.email', oldOrderData.collaborator.email, data.collaborator.email);
         compareField('collaborator.phone', oldOrderData.collaborator.phone, data.collaborator.phone);
     }
 
-    // Compare nested equipment fields
     if (data.equipment) {
         compareField('equipment.type', oldOrderData.equipment.type, data.equipment.type);
         compareField('equipment.brand', oldOrderData.equipment.brand, data.equipment.brand);
@@ -371,81 +385,31 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
         compareField('equipment.serialNumber', oldOrderData.equipment.serialNumber, data.equipment.serialNumber);
     }
 
-    // Only proceed with update and log if there are actual changes
     if (changes.length > 0) {
         const newEditLogEntry: EditLogEntry = {
             timestamp: new Date(),
             responsible: responsibleUserName,
             changes: changes,
-            observation: "Detalhes da OS editados.", // Or a more specific observation
+            observation: "Detalhes da OS editados.",
         };
 
         await updateDoc(serviceOrderDocRef, {
             ...data,
-            editLogs: arrayUnion(newEditLogEntry) // Add new edit log entry
+            editLogs: arrayUnion(newEditLogEntry)
         });
     } else {
         console.log("No significant changes detected for OS details. Skipping update.");
-        // If no changes, return the current data to avoid unnecessary re-fetch
-        const client = await getClientById(oldOrderData.clientId);
-        return {
-            ...oldOrderData,
-            id: oldOrderData.id,
-            clientName: client ? client.name : 'Cliente não encontrado',
-            contractedServices: client ? { 
-                webProtection: client.webProtection || false,
-                backup: client.backup || false,
-                edr: client.edr || false,
-            } : { webProtection: false, backup: false, edr: false },
-            createdAt: oldOrderData.createdAt instanceof Date ? oldOrderData.createdAt : (oldOrderData.createdAt as any).toDate(),
-            logs: oldOrderData.logs.map(log => ({
-                ...log,
-                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            })),
-            attachments: oldOrderData.attachments || [],
-            editLogs: oldOrderData.editLogs?.map(log => ({
-                ...log,
-                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            })) || []
-        } as ServiceOrder;
+        return getServiceOrderById(id);
     }
     
-    // Fetch the updated document to return the full object with clientName and other computed fields
-    const updatedServiceOrderSnap = await getDoc(serviceOrderDocRef);
-    if (updatedServiceOrderSnap.exists()) {
-        const updatedOrderData = updatedServiceOrderSnap.data() as ServiceOrder;
-        const client = await getClientById(updatedOrderData.clientId);
-
-        return {
-            ...updatedOrderData, 
-            id: updatedServiceOrderSnap.id,
-            clientName: client ? client.name : 'Cliente não encontrado',
-            contractedServices: client ? { 
-                webProtection: client.webProtection || false,
-                backup: client.backup || false,
-                edr: client.edr || false,
-            } : { webProtection: false, backup: false, edr: false },
-            createdAt: updatedOrderData.createdAt instanceof Date ? updatedOrderData.createdAt : (updatedOrderData.createdAt as any).toDate(),
-            logs: updatedOrderData.logs.map(log => ({
-                ...log,
-                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            })),
-            attachments: updatedOrderData.attachments || [],
-            editLogs: updatedOrderData.editLogs?.map(log => ({
-                ...log,
-                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            })) || []
-        } as ServiceOrder;
-    }
-    return null;
+    return getServiceOrderById(id);
 };
 
 export const addServiceOrder = async (
-    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServices' | 'editLogs'>
+    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServiceIds' | 'editLogs'>
   ): Promise<ServiceOrder> => {
     const serviceOrdersCollection = collection(db, "serviceOrders");
   
-    // 🚨 Executar fora da transação!
     const lastOrderQuery = query(serviceOrdersCollection, orderBy("orderNumber", "desc"), limit(1));
     const lastOrderSnapshot = await getDocs(lastOrderQuery);
   
@@ -458,15 +422,16 @@ export const addServiceOrder = async (
   
     const formattedOrderNumber = `OS-${String(nextOrderNumber).padStart(3, '0')}`;
   
-    // Fetch client to get contracted services at the time of OS creation
+    // Fetch client and their contracted services
     const client = await getClientById(data.clientId);
-    const contractedServicesAtCreation: ContractedServices = client ? {
-        webProtection: client.webProtection || false,
-        backup: client.backup || false,
-        edr: client.edr || false,
-    } : { webProtection: false, backup: false, edr: false };
+    let contractedServicesAtCreation: ProvidedService[] = [];
+    if (client && client.contractedServiceIds && client.contractedServiceIds.length > 0) {
+        const servicesQuery = query(collection(db, 'providedServices'), where('__name__', 'in', client.contractedServiceIds));
+        const servicesSnapshot = await getDocs(servicesQuery);
+        contractedServicesAtCreation = servicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProvidedService));
+    }
 
-    // Now, run the transaction
+    // Run the transaction
     const newOrder = await runTransaction(db, async (tx) => {
       const newOrderData: Omit<ServiceOrder, 'id'> = {
         ...data,
@@ -482,10 +447,10 @@ export const addServiceOrder = async (
             observation: 'OS criada no sistema.',
           }
         ],
-        attachments: [], // Initialize attachments as an empty array
-        contractedServices: contractedServicesAtCreation, // Save contracted services from client profile at creation
-        confirmedServices: { webProtection: false, backup: false, edr: false }, // Initialize all as false
-        editLogs: [] // Initialize editLogs as an empty array
+        attachments: [],
+        contractedServices: contractedServicesAtCreation,
+        confirmedServiceIds: [], // Initialize as empty array
+        editLogs: []
       };
   
       const newServiceOrderRef = doc(serviceOrdersCollection);
@@ -497,7 +462,7 @@ export const addServiceOrder = async (
     return newOrder;
   };
 
-export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string, attachments?: string[], confirmedServices?: ContractedServices): Promise<UpdateServiceOrderResult> => {
+export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string, attachments?: string[], confirmedServiceIds?: string[]): Promise<UpdateServiceOrderResult> => {
     const serviceOrderDocRef = doc(db, "serviceOrders", id);
     
     const currentOrderSnap = await getDoc(serviceOrderDocRef);
@@ -506,24 +471,22 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
     const currentOrderData = currentOrderSnap.data() as ServiceOrder;
     const oldStatus = currentOrderData.status;
 
-    // Prevent modification if status is 'entregue'
     if (oldStatus === 'entregue') {
-        return { updatedOrder: null, emailSent: false, emailErrorMessage: "OS com status 'Entregue' não pode ser modificada." };
+        return { updatedOrder: null, emailSent: false, emailErrorMessage: "OS com status 'Entregue' não pode ter seu status alterado." };
     }
 
-    // Define valid status transitions
     const validTransitions: Record<ServiceOrderStatus, ServiceOrderStatus[]> = {
         'aberta': ['em_analise'],
         'em_analise': ['aguardando_peca', 'aguardando_terceiros', 'pronta_entrega'],
         'aguardando_peca': ['em_analise', 'pronta_entrega'],
         'aguardando_terceiros': ['em_analise', 'pronta_entrega'],
         'pronta_entrega': ['entregue'],
-        'entregue': [], // No transitions from 'entregue'
+        'entregue': [],
     };
 
     const allowedNextStatuses = validTransitions[oldStatus];
 
-    if (!allowedNextStatuses || !allowedNextStatuses.includes(newStatus)) {
+    if (newStatus !== oldStatus && (!allowedNextStatuses || !allowedNextStatuses.includes(newStatus))) {
         return { updatedOrder: null, emailSent: false, emailErrorMessage: `Transição de status inválida de '${oldStatus}' para '${newStatus}'.` };
     }
 
@@ -535,11 +498,13 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
         observation: observation ?? undefined, 
     };
 
-    const updatePayload: any = {
-        status: newStatus,
-        logs: arrayUnion(newLogEntry) // Use arrayUnion to safely add to the array
-    };
+    const updatePayload: any = { };
 
+    if (newStatus !== oldStatus) {
+        updatePayload.status = newStatus;
+        updatePayload.logs = arrayUnion(newLogEntry);
+    }
+    
     if (technicalSolution !== undefined) {
         updatePayload.technicalSolution = technicalSolution;
     }
@@ -548,13 +513,14 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
         updatePayload.attachments = attachments;
     }
 
-    if (confirmedServices !== undefined) {
-        updatePayload.confirmedServices = confirmedServices;
+    if (confirmedServiceIds !== undefined) {
+        updatePayload.confirmedServiceIds = confirmedServiceIds;
     }
 
-    await updateDoc(serviceOrderDocRef, updatePayload);
+    if (Object.keys(updatePayload).length > 0) {
+        await updateDoc(serviceOrderDocRef, updatePayload);
+    }
 
-    // Fetch the updated document to return the full object with clientName
     const updatedServiceOrderSnap = await getDoc(serviceOrderDocRef);
     if (updatedServiceOrderSnap.exists()) {
         const updatedOrderData = updatedServiceOrderSnap.data() as ServiceOrder;
@@ -563,10 +529,8 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
         let emailSent = false;
         let emailErrorMessage: string | undefined;
 
-        // Determine the recipient email for the frontend check
         const recipientEmail = client?.email || updatedOrderData.collaborator.email;
 
-        // Send email notification if status is 'entregue'
         if (newStatus === 'entregue' && recipientEmail) {
             try {
                 const response = await fetch('/api/send-email', {
@@ -583,7 +547,6 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
                     console.error(emailErrorMessage);
                 } else {
                     emailSent = true;
-                    console.log('Email de notificação enviado com sucesso para o cliente.');
                 }
             } catch (error) {
                 emailErrorMessage = `Erro de rede ao tentar enviar e-mail: ${(error as Error).message}`;
@@ -591,26 +554,10 @@ export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStat
             }
         } else if (newStatus === 'entregue' && !recipientEmail) {
             emailErrorMessage = 'Nenhum e-mail de destinatário válido fornecido para notificação.';
-            console.warn(emailErrorMessage);
         }
 
         return {
-            updatedOrder: {
-                ...updatedOrderData, 
-                id: updatedServiceOrderSnap.id,
-                clientName: client ? client.name : 'Cliente não encontrado',
-                // Ensure createdAt and log timestamps are Date objects
-                createdAt: updatedOrderData.createdAt instanceof Date ? updatedOrderData.createdAt : (updatedOrderData.createdAt as any).toDate(),
-                logs: updatedOrderData.logs.map(log => ({
-                    ...log,
-                    timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-                })),
-                attachments: updatedOrderData.attachments || [], // Ensure attachments is an empty array if undefined
-                editLogs: updatedOrderData.editLogs?.map(log => ({
-                    ...log,
-                    timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-                })) || []
-            } as ServiceOrder,
+            updatedOrder: await getServiceOrderById(id),
             emailSent,
             emailErrorMessage,
         };

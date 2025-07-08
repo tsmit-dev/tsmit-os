@@ -2,20 +2,19 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ServiceOrder, ServiceOrderStatus, ContractedServices } from "@/lib/types";
+import { ServiceOrder, ServiceOrderStatus, ProvidedService } from "@/lib/types";
 import { getServiceOrderById, updateServiceOrder } from "@/lib/data";
 import { useAuth } from "@/components/auth-provider";
 import { usePermissions } from "@/context/PermissionsContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
-import { User, HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File, CheckCircle, AlertCircle, Edit, ListTree } from "lucide-react";
+import { HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File, CheckCircle, AlertCircle, Edit, ListTree } from "lucide-react";
 import Link from "next/link";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
@@ -23,7 +22,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { EditOsDialog } from "@/components/edit-os-dialog"; // Import the new dialog
+import { EditOsDialog } from "@/components/edit-os-dialog";
+import { StatusBadge } from "@/components/status-badge";
 
 export default function OsDetailPage() {
     const params = useParams();
@@ -39,49 +39,12 @@ export default function OsDetailPage() {
     const [isUpdating, setIsUpdating] = useState(false);
     const [currentStatus, setCurrentStatus] = useState<ServiceOrderStatus | undefined>();
     const [technicalSolution, setTechnicalSolution] = useState('');
-    const [confirmedServices, setConfirmedServices] = useState<ContractedServices>({ webProtection: false, backup: false, edr: false });
-    const [isEditOsDialogOpen, setIsEditOsDialogOpen] = useState(false); // State for edit dialog
+    const [confirmedServiceIds, setConfirmedServiceIds] = useState<string[]>([]);
+    const [isEditOsDialogOpen, setIsEditOsDialogOpen] = useState(false);
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [uploading, setUploading] = useState(0); // Changed to number for progress
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const formatValueForDisplay = (value: any): string => {
-        if (typeof value === 'boolean') {
-            return value ? 'Sim' : 'Não';
-        }
-        return String(value);
-    };
-
-    const getTranslatedFieldName = (field: string): string => {
-        const translations: { [key: string]: string } = {
-            // Basic OS fields
-            orderNumber: 'Número da OS',
-            clientId: 'Cliente (ID)', // Consider fetching client name if more user-friendly
-            reportedProblem: 'Problema Relatado',
-            analyst: 'Analista',
-            technicalSolution: 'Solução Técnica',
-            // Collaborator fields (nested under collaborator.field)
-            'collaborator.name': 'Nome do Contato',
-            'collaborator.email': 'Email do Contato',
-            'collaborator.phone': 'Telefone do Contato',
-            // Equipment fields (nested under equipment.field)
-            'equipment.type': 'Tipo do Equipamento',
-            'equipment.brand': 'Marca do Equipamento',
-            'equipment.model': 'Modelo do Equipamento',
-            'equipment.serialNumber': 'Número de Série',
-            // Contracted Services (direct fields for simplicity, might need deeper mapping)
-            'contractedServices.webProtection': 'Serviço: WebProtection',
-            'contractedServices.backup': 'Serviço: Backup',
-            'contractedServices.edr': 'Serviço: EDR',
-            // Confirmed Services (direct fields for simplicity, might need deeper mapping)
-            'confirmedServices.webProtection': 'Serviço Confirmado: WebProtection',
-            'confirmedServices.backup': 'Serviço Confirmado: Backup',
-            'confirmedServices.edr': 'Serviço Confirmado: EDR',
-        };
-        return translations[field] || field; // Return translated name or original if not found
-    };
 
     // useCallback to memoize the fetch function, preventing unnecessary re-renders
     const fetchServiceOrder = useCallback(async () => {
@@ -93,7 +56,7 @@ export default function OsDetailPage() {
                 setOrder(data);
                 setCurrentStatus(data.status);
                 setTechnicalSolution(data.technicalSolution || '');
-                setConfirmedServices(data.confirmedServices || { webProtection: false, backup: false, edr: false });
+                setConfirmedServiceIds(data.confirmedServiceIds || []);
             } else {
                 toast({ title: "Erro", description: "Ordem de Serviço não encontrada.", variant: "destructive" });
                 router.push('/os');
@@ -107,17 +70,11 @@ export default function OsDetailPage() {
     }, [id, toast, router]);
 
     useEffect(() => {
-        if (!loadingPermissions) {
-            if (!hasPermission('os')) {
-                toast({
-                    title: "Acesso Negado",
-                    description: "Você não tem permissão para acessar Ordens de Serviço.",
-                    variant: "destructive",
-                });
-                router.replace('/dashboard');
-                return;
-            }
+        if (!loadingPermissions && hasPermission('os')) {
             fetchServiceOrder();
+        } else if (!loadingPermissions && !hasPermission('os')) {
+            toast({ title: "Acesso Negado", description: "Você não tem permissão para acessar Ordens de Serviço.", variant: "destructive" });
+            router.replace('/dashboard');
         }
     }, [loadingPermissions, hasPermission, router, fetchServiceOrder]);
 
