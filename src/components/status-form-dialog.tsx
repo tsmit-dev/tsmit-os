@@ -30,16 +30,16 @@ import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
-import { cn } from '@/lib/utils';
 import { getStatusColorStyle } from '../lib/status-colors';
 
-// Update schema to accept a hex color string
+// Define the schema outside the component
 const statusFormSchema = z.object({
   name: z.string().min(3, { message: 'O nome deve ter pelo menos 3 caracteres.' }),
   order: z.coerce.number().int().positive({ message: 'A ordem deve ser um número positivo.' }),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, { message: 'Por favor, insira uma cor hexadecimal válida (ex: #RRGGBB).' }),
   isInitial: z.boolean().default(false),
   triggersEmail: z.boolean().default(false),
+  canGoBack: z.boolean().default(false), // New field
   allowedNextStatuses: z.array(z.string()).default([]),
 });
 
@@ -56,14 +56,29 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
+  // Create a dynamic schema for validation
+  const dynamicStatusSchema = statusFormSchema.refine(
+    (data) => {
+      const isOrderTaken = allStatuses.some(
+        (s) => s.order === data.order && s.id !== status?.id
+      );
+      return !isOrderTaken;
+    },
+    {
+      message: 'Esta ordem já está em uso por outro status.',
+      path: ['order'],
+    }
+  );
+
   const form = useForm<StatusFormValues>({
-    resolver: zodResolver(statusFormSchema),
+    resolver: zodResolver(dynamicStatusSchema),
     defaultValues: {
       name: '',
       order: 1,
-      color: '#808080', // Default to gray
+      color: '#808080',
       isInitial: false,
       triggersEmail: false,
+      canGoBack: false,
       allowedNextStatuses: [],
     },
   });
@@ -77,20 +92,26 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
           color: status.color || '#808080',
           isInitial: status.isInitial ?? false,
           triggersEmail: status.triggersEmail ?? false,
+          canGoBack: status.canGoBack ?? false,
           allowedNextStatuses: status.allowedNextStatuses ?? [],
         });
       } else {
+        // Find the highest order number and add 1 for the new default
+        const nextOrder = allStatuses.length > 0
+            ? Math.max(...allStatuses.map(s => s.order)) + 1
+            : 1;
         form.reset({
           name: '',
-          order: 1,
+          order: nextOrder,
           color: '#808080',
           isInitial: false,
           triggersEmail: false,
+          canGoBack: false,
           allowedNextStatuses: [],
         });
       }
     }
-  }, [status, form, isOpen]);
+  }, [status, allStatuses, form, isOpen]);
 
   const onSubmit = async (data: StatusFormValues) => {
     setLoading(true);
@@ -207,7 +228,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
             />
 
             <div className="space-y-2">
-              <FormField
+               <FormField
                 control={form.control}
                 name="isInitial"
                 render={({ field }) => (
@@ -223,6 +244,16 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                      <div className="space-y-0.5"><FormLabel>Dispara E-mail</FormLabel><FormDescription>Notifica o cliente por e-mail.</FormDescription></div>
+                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="canGoBack"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                     <div className="space-y-0.5"><FormLabel>Permite Retroceder</FormLabel><FormDescription>Permite voltar para o status anterior.</FormDescription></div>
                     <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
                 )}

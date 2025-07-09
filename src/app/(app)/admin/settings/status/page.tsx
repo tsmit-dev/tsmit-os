@@ -112,15 +112,17 @@ export default function StatusSettingsPage() {
               <TableRow>
                 <TableHead className="w-[80px]">Ordem</TableHead>
                 <TableHead>Nome do Status</TableHead>
+                <TableHead className="w-[80px]">Cor</TableHead>
                 <TableHead>Status Inicial?</TableHead>
                 <TableHead>Dispara Email?</TableHead>
+                <TableHead>Pode Voltar?</TableHead>
                 <TableHead className="w-[80px] text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center">
+                  <TableCell colSpan={7} className="text-center">
                     Carregando...
                   </TableCell>
                 </TableRow>
@@ -129,8 +131,17 @@ export default function StatusSettingsPage() {
                   <TableRow key={status.id}>
                     <TableCell>{status.order}</TableCell>
                     <TableCell className="font-medium">{status.name}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center">
+                        <div 
+                          className="h-4 w-4 rounded-full border" 
+                          style={{ backgroundColor: status.color }} 
+                        />
+                      </div>
+                    </TableCell>
                     <TableCell>{status.isInitial ? 'Sim' : 'Não'}</TableCell>
                     <TableCell>{status.triggersEmail ? 'Sim' : 'Não'}</TableCell>
+                    <TableCell>{status.canGoBack ? 'Sim' : 'Não'}</TableCell>
                     <TableCell className="text-right">
                        <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -155,7 +166,7 @@ export default function StatusSettingsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center">
+                  <TableCell colSpan={7} className="text-center">
                     Nenhum status encontrado. Adicione um para começar.
                   </TableCell>
                 </TableRow>

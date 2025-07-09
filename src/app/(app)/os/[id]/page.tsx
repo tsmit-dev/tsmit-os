@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
-import { HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File, CheckCircle, AlertCircle, Edit, ListTree } from "lucide-react";
+import { HardDrive, FileText, Wrench, History, ArrowRight, Briefcase, FileUp, Printer, Upload, X, File, CheckCircle, AlertCircle, Edit, ListTree, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
@@ -53,16 +53,40 @@ export default function OsDetailPage() {
 
     const availableStatuses = useMemo(() => {
         if (!order?.status) return [];
-        if (hasPermission('adminSettings')) {
-            return statuses.filter(s => s.id !== order.status.id);
-        }
 
-        const allowedList = order.status.allowedNextStatuses;
-        if (allowedList && allowedList.length > 0) {
-            return statuses.filter(s => allowedList.includes(s.id));
+        let allowedStatuses: Status[] = [];
+
+        // Admin can go to any status
+        if (hasPermission('adminSettings')) {
+            allowedStatuses = statuses.filter(s => s.id !== order.status.id);
+        } else {
+            // Check for defined next statuses
+            const allowedList = order.status.allowedNextStatuses;
+            if (allowedList && allowedList.length > 0) {
+                allowedStatuses = statuses.filter(s => allowedList.includes(s.id));
+            } else {
+                 // Default: allow any status except the current one if no rule is set
+                 allowedStatuses = statuses.filter(s => s.id !== order.status.id);
+            }
         }
         
-        return statuses.filter(s => s.id !== order.status.id);
+        // Add previous status if canGoBack is true
+        if (order.status.canGoBack && order.logs.length > 1) {
+            // Find the ID of the status before the most recent one
+            const previousLog = order.logs[order.logs.length - 1]; 
+            const previousStatusId = previousLog.fromStatus;
+            
+            // Find the full status object
+            const previousStatus = statuses.find(s => s.id === previousStatusId);
+
+            // Add it to the list if it's not already there
+            if (previousStatus && !allowedStatuses.some(s => s.id === previousStatusId)) {
+                // To make it visually distinct, we can add a special property or handle it in the render
+                allowedStatuses.unshift({ ...previousStatus, isBackButton: true } as any);
+            }
+        }
+        
+        return allowedStatuses;
     }, [order, statuses, hasPermission]);
 
 
@@ -324,10 +348,15 @@ export default function OsDetailPage() {
                                <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Selecione o próximo status" /></SelectTrigger>
                                <SelectContent>
                                    {order.status && <SelectItem value={order.status.id} disabled>-- {order.status.name} (Atual) --</SelectItem>}
-                                   {availableStatuses.map(status => (<SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>))}
+                                   {availableStatuses.map(status => (<SelectItem key={status.id} value={status.id}>
+                                    <div className="flex items-center gap-2">
+                                        {(status as any).isBackButton && <RotateCcw className="h-4 w-4 text-muted-foreground" />}
+                                        <span>{status.name}</span>
+                                    </div>
+                                   </SelectItem>))}
                                </SelectContent>
                            </Select>
-                            {availableStatuses.length === 0 && !isDelivered && <p className="text-xs text-muted-foreground mt-1">Não há próximos status permitidos. Configure em Admin &gt; Status.</p>}
+                            {(availableStatuses.length === 0 && !isDelivered) && <p className="text-xs text-muted-foreground mt-1">Não há próximos status permitidos. Configure em Admin &gt; Status.</p>}
                        </div>
                         
                         {showServiceConfirmation && (

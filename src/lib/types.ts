@@ -46,10 +46,11 @@ export interface Status {
   id: string;
   name: string;
   order: number;
-  color: string; // Added color field
+  color: string;
   isInitial?: boolean;
   triggersEmail?: boolean;
   allowedNextStatuses?: string[];
+  canGoBack?: boolean; 
 }
 
 
