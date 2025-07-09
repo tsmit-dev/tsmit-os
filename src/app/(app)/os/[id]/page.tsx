@@ -55,38 +55,40 @@ export default function OsDetailPage() {
         if (!order?.status) return [];
     
         const current = order.status;
-        let allowed: Status[] = [];
+        const combinedAllowed = new Set<Status>();
     
         if (hasPermission('adminSettings')) {
-            // Admin can see all statuses except the current one
-            allowed = statuses.filter(s => s.id !== current.id);
+            // Admin can move to any status
+            statuses.forEach(s => {
+                if (s.id !== current.id) {
+                    combinedAllowed.add(s);
+                }
+            });
         } else {
-            // Regular user logic: only allow defined transitions
+            // Handle forward statuses
             if (current.allowedNextStatuses && current.allowedNextStatuses.length > 0) {
-                allowed = statuses.filter(s => current.allowedNextStatuses?.includes(s.id));
-            } else {
-                // If allowedNextStatuses is empty, no forward transitions are permitted
-                allowed = [];
+                statuses.forEach(s => {
+                    if (current.allowedNextStatuses?.includes(s.id)) {
+                        combinedAllowed.add(s);
+                    }
+                });
             }
     
-            // Handle 'canGoBack' logic independently
-            if (current.canGoBack && order.logs.length > 0) {
-                const lastLogEntry = order.logs[0]; 
-                const previousStatusId = lastLogEntry.fromStatus;
-                
-                const previousStatus = statuses.find(s => s.id === previousStatusId);
-    
-                if (previousStatus && !allowed.some(s => s.id === previousStatusId)) {
-                    // Add the regression status, marking it for the UI
-                    allowed.unshift({ ...previousStatus, isBackButton: true } as any);
-                }
+            // Handle backward statuses
+            if (current.allowedPreviousStatuses && current.allowedPreviousStatuses.length > 0) {
+                statuses.forEach(s => {
+                    if (current.allowedPreviousStatuses?.includes(s.id)) {
+                        const statusToAdd = { ...s, isBackButton: true };
+                        combinedAllowed.add(statusToAdd as any);
+                    }
+                });
             }
         }
     
-        // Sort for consistent display, keeping any 'go back' option at the top
-        return allowed.sort((a, b) => {
-            if ((a as any).isBackButton) return -1;
-            if ((b as any).isBackButton) return 1;
+        // Convert Set to Array and sort
+        return Array.from(combinedAllowed).sort((a, b) => {
+            if ((a as any).isBackButton && !(b as any).isBackButton) return -1;
+            if (!(a as any).isBackButton && (b as any).isBackButton) return 1;
             return a.order - b.order;
         });
     

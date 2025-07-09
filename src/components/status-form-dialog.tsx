@@ -38,9 +38,9 @@ const statusFormSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, { message: 'Por favor, insira uma cor hexadecimal válida (ex: #RRGGBB).' }),
   isInitial: z.boolean().default(false),
   triggersEmail: z.boolean().default(false),
-  canGoBack: z.boolean().default(false),
   isPickupStatus: z.boolean().default(false),
   allowedNextStatuses: z.array(z.string()).default([]),
+  allowedPreviousStatuses: z.array(z.string()).default([]),
 });
 
 type StatusFormValues = z.infer<typeof statusFormSchema>;
@@ -78,9 +78,9 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
       color: '#808080',
       isInitial: false,
       triggersEmail: false,
-      canGoBack: false,
       isPickupStatus: false,
       allowedNextStatuses: [],
+      allowedPreviousStatuses: [],
     },
   });
 
@@ -93,9 +93,9 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
           color: status.color || '#808080',
           isInitial: status.isInitial ?? false,
           triggersEmail: status.triggersEmail ?? false,
-          canGoBack: status.canGoBack ?? false,
           isPickupStatus: status.isPickupStatus ?? false,
           allowedNextStatuses: status.allowedNextStatuses ?? [],
+          allowedPreviousStatuses: status.allowedPreviousStatuses ?? [],
         });
       } else {
         const nextOrder = allStatuses.length > 0
@@ -107,35 +107,17 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
           color: '#808080',
           isInitial: false,
           triggersEmail: false,
-          canGoBack: false,
           isPickupStatus: false,
           allowedNextStatuses: [],
+          allowedPreviousStatuses: [],
         });
       }
     }
   }, [status, allStatuses, form, isOpen]);
 
   const filteredStatuses = useMemo(() => {
-    if (!currentStatus) {
-      return allStatuses.filter(s => s.id !== status?.id);
-    }
-
-    let allowedStatuses = allStatuses;
-
-    if (currentStatus.allowedNextStatuses && currentStatus.allowedNextStatuses.length > 0) {
-      allowedStatuses = allStatuses.filter(s => currentStatus.allowedNextStatuses?.includes(s.id));
-    }
-
-    if (currentStatus.canGoBack) {
-      const previousStatusOrder = currentStatus.order - 1;
-      const previousStatus = allStatuses.find(s => s.order === previousStatusOrder);
-      if (previousStatus && !allowedStatuses.some(s => s.id === previousStatus.id)) {
-        allowedStatuses.push(previousStatus);
-      }
-    }
-
-    return allowedStatuses.filter(s => s.id !== status?.id);
-  }, [allStatuses, currentStatus, status]);
+    return allStatuses.filter(s => s.id !== status?.id);
+  }, [allStatuses, status]);
 
 
   const onSubmit = async (data: StatusFormValues) => {
@@ -215,8 +197,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                   <div className="mb-2">
                     <FormLabel>Próximos Status Permitidos</FormLabel>
                     <FormDescription>
-                      Selecione para quais status uma OS pode ir. 
-                      Deixe em branco para permitir a transição para qualquer status.
+                      Selecione para quais status uma OS pode avançar.
                     </FormDescription>
                   </div>
                   <ScrollArea className="h-32 rounded-md border p-4">
@@ -225,6 +206,48 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                           key={item.id}
                           control={form.control}
                           name="allowedNextStatuses"
+                          render={({ field }) => (
+                            <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0 mb-3">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(item.id)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...(field.value || []), item.id])
+                                      : field.onChange(field.value?.filter((value) => value !== item.id));
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal flex items-center gap-2">
+                                <Badge variant="custom" style={getStatusColorStyle(item.color)}>{item.name}</Badge>
+                              </FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                  </ScrollArea>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="allowedPreviousStatuses"
+              render={() => (
+                <FormItem>
+                  <div className="mb-2">
+                    <FormLabel>Status Anteriores Permitidos</FormLabel>
+                    <FormDescription>
+                      Selecione de quais status uma OS pode retroceder.
+                    </FormDescription>
+                  </div>
+                  <ScrollArea className="h-32 rounded-md border p-4">
+                    {filteredStatuses.map((item) => (
+                        <FormField
+                          key={item.id}
+                          control={form.control}
+                          name="allowedPreviousStatuses"
                           render={({ field }) => (
                             <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0 mb-3">
                               <FormControl>
@@ -267,16 +290,6 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                      <div className="space-y-0.5"><FormLabel>Dispara E-mail</FormLabel><FormDescription>Notifica o cliente por e-mail.</FormDescription></div>
-                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                  </FormItem>
-                )}
-              />
-               <FormField
-                control={form.control}
-                name="canGoBack"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                     <div className="space-y-0.5"><FormLabel>Permite Retroceder</FormLabel><FormDescription>Permite voltar para o status anterior.</FormDescription></div>
                     <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
                 )}

@@ -50,7 +50,7 @@ export interface Status {
   isInitial?: boolean;
   triggersEmail?: boolean;
   allowedNextStatuses?: string[];
-  canGoBack?: boolean; 
+  allowedPreviousStatuses?: string[]; // New field
   isPickupStatus?: boolean;
 }
 

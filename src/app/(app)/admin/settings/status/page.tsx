@@ -116,14 +116,13 @@ export default function StatusSettingsPage() {
                 <TableHead>P/ Retirada?</TableHead>
                 <TableHead>Status Inicial?</TableHead>
                 <TableHead>Dispara Email?</TableHead>
-                <TableHead>Pode Voltar?</TableHead>
                 <TableHead className="w-[80px] text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center">
+                  <TableCell colSpan={7} className="text-center">
                     Carregando...
                   </TableCell>
                 </TableRow>
@@ -143,7 +142,6 @@ export default function StatusSettingsPage() {
                     <TableCell>{status.isPickupStatus ? 'Sim' : 'Não'}</TableCell>
                     <TableCell>{status.isInitial ? 'Sim' : 'Não'}</TableCell>
                     <TableCell>{status.triggersEmail ? 'Sim' : 'Não'}</TableCell>
-                    <TableCell>{status.canGoBack ? 'Sim' : 'Não'}</TableCell>
                     <TableCell className="text-right">
                        <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -168,7 +166,7 @@ export default function StatusSettingsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center">
+                  <TableCell colSpan={7} className="text-center">
                     Nenhum status encontrado. Adicione um para começar.
                   </TableCell>
                 </TableRow>
