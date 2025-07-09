@@ -46,6 +46,7 @@ export interface Status {
   id: string;
   name: string;
   order: number;
+  color: string; // Added color field
   isInitial?: boolean;
   triggersEmail?: boolean;
   allowedNextStatuses?: string[];
