@@ -48,7 +48,7 @@ export function OsTable({ orders, title }: OsTableProps) {
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="border rounded-md overflow-x-auto"> {/* Added overflow-x-auto here */}
+        <div className="border rounded-md overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -68,7 +68,7 @@ export function OsTable({ orders, title }: OsTableProps) {
                     <TableCell>{order.clientName}</TableCell>
                     <TableCell className="hidden sm:table-cell">{order.equipment.brand} {order.equipment.model}</TableCell>
                     <TableCell className="hidden md:table-cell">{new Date(order.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell><StatusBadge status={order.status} /></TableCell>
+                    <TableCell><StatusBadge statusId={order.status} /></TableCell> {/* Correctly changed to statusId */}
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" onClick={(e) => {
                           e.stopPropagation();

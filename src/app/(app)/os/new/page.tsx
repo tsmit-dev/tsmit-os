@@ -24,13 +24,14 @@ import { PlusCircle } from "lucide-react";
 import { Client } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePermissions } from "@/context/PermissionsContext";
-import { useAuth } from "@/components/auth-provider"; // Re-import useAuth
+import { useAuth } from "@/components/auth-provider";
+import { useStatuses } from "@/hooks/use-statuses"; // 1. Import useStatuses
 
 const formSchema = z.object({
   clientId: z.string({ required_error: "Selecione um cliente." }),
   collaboratorName: z.string().min(2, "Nome do colaborador é obrigatório."),
-  collaboratorEmail: z.string().email("E-mail do colaborador inválido."),
-  collaboratorPhone: z.string().min(10, "Telefone do colaborador inválido."),
+  collaboratorEmail: z.string().email("E-mail do colaborador inválido.").optional().or(z.literal('')),
+  collaboratorPhone: z.string().optional(),
   equipType: z.string().min(2, "Tipo de equipamento é obrigatório."),
   equipBrand: z.string().min(2, "Marca é obrigatória."),
   equipModel: z.string().min(1, "Modelo é obrigatório."),
@@ -39,8 +40,9 @@ const formSchema = z.object({
 });
 
 export default function NewOsPage() {
-    const { hasPermission, loadingPermissions } = usePermissions(); // From PermissionsContext
-    const { user } = useAuth(); // From AuthProvider for user object
+    const { hasPermission, loadingPermissions } = usePermissions();
+    const { user } = useAuth();
+    const { statuses, loading: loadingStatuses } = useStatuses(); // 2. Use the hook
     const router = useRouter();
     const { toast } = useToast();
     const [clients, setClients] = useState<Client[]>([]);
@@ -62,13 +64,8 @@ export default function NewOsPage() {
 
     useEffect(() => {
         if (!loadingPermissions) {
-            // Check for 'os' permission to create new service orders
             if (!hasPermission('os')) {
-                toast({
-                    title: "Acesso Negado",
-                    description: "Você não tem permissão para criar novas Ordens de Serviço.",
-                    variant: "destructive",
-                });
+                toast({ title: "Acesso Negado", description: "Você não tem permissão para criar novas OS.", variant: "destructive" });
                 router.replace('/dashboard');
             }
         }
@@ -76,11 +73,9 @@ export default function NewOsPage() {
 
     useEffect(() => {
         async function fetchClients() {
-            // Only fetch clients if permissions are loaded and user has access
             if (!loadingPermissions && hasPermission('os')) {
                 try {
-                    const clientData = await getClients();
-                    setClients(clientData);
+                    setClients(await getClients());
                 } catch (error) {
                     toast({ title: "Erro", description: "Não foi possível carregar os clientes.", variant: "destructive" });
                 } finally {
@@ -96,11 +91,19 @@ export default function NewOsPage() {
             toast({ title: "Erro de autenticação", description: "Usuário não encontrado.", variant: "destructive" });
             return;
         }
-        if (!hasPermission('os')) { // Double check permission on submit
-             toast({
-                title: "Acesso Negado",
-                description: "Você não tem permissão para criar novas Ordens de Serviço.",
+        if (!hasPermission('os')) {
+             toast({ title: "Acesso Negado", description: "Você não tem permissão para criar novas OS.", variant: "destructive" });
+            return;
+        }
+
+        // 3. Find the initial status
+        const initialStatus = statuses.find(s => s.isInitial);
+        if (!initialStatus) {
+            toast({
+                title: "Configuração Necessária",
+                description: "Nenhum status inicial foi definido. Por favor, configure um status como inicial na área de administração.",
                 variant: "destructive",
+                duration: 7000,
             });
             return;
         }
@@ -120,11 +123,12 @@ export default function NewOsPage() {
                     serialNumber: values.equipSerial,
                 },
                 reportedProblem: values.problem,
-                analyst: user.name, // Logged in user creates the OS
+                analyst: user.name,
+                statusId: initialStatus.id, // 4. Pass the initial status ID
             });
             toast({
                 title: "Sucesso!",
-                description: `OS ${newOrder.id} criada.`,
+                description: `OS ${newOrder.id} criada com o status "${initialStatus.name}".`,
                 variant: "default",
             });
             router.push(`/os/${newOrder.id}`);
@@ -138,13 +142,20 @@ export default function NewOsPage() {
         }
     }
     
-    // Show skeleton while permissions or clients are loading, or if user doesn't have permission
-    if (loadingPermissions || !hasPermission('os') || loadingClients) {
-        return <div className="container mx-auto space-y-4 p-4 sm:p-6 lg:p-8">
-            <Skeleton className="h-10 w-1/2" />
-            <Skeleton className="h-64 w-full" />
-            <Skeleton className="h-48 w-full" />
-        </div>
+    if (loadingPermissions || loadingClients || loadingStatuses) {
+        return (
+            <div className="container mx-auto space-y-4 p-4 sm:p-6 lg:p-8">
+                <div className="flex items-center gap-4 mb-6">
+                    <Skeleton className="h-8 w-8" />
+                    <Skeleton className="h-10 w-1/2" />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <Skeleton className="h-[350px] w-full" />
+                    <Skeleton className="h-[350px] w-full" />
+                </div>
+                <Skeleton className="h-48 w-full" />
+            </div>
+        );
     }
 
   return (
@@ -157,9 +168,7 @@ export default function NewOsPage() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Informações do Cliente e Colaborador</CardTitle>
-                    </CardHeader>
+                    <CardHeader><CardTitle>Informações do Cliente e Contato</CardTitle></CardHeader>
                     <CardContent className="space-y-4">
                          <FormField control={form.control} name="clientId" render={({ field }) => (
                             <FormItem>
@@ -174,20 +183,18 @@ export default function NewOsPage() {
                             </FormItem>
                          )} />
                          <FormField control={form.control} name="collaboratorName" render={({ field }) => (
-                            <FormItem><FormLabel>Nome do Colaborador (Contato)</FormLabel><FormControl><Input placeholder="Nome de quem trouxe o equipamento" {...field} /></FormControl><FormMessage /></FormItem>
+                            <FormItem><FormLabel>Nome do Contato</FormLabel><FormControl><Input placeholder="Nome de quem trouxe o equipamento" {...field} /></FormControl><FormMessage /></FormItem>
                          )} />
                          <FormField control={form.control} name="collaboratorEmail" render={({ field }) => (
-                            <FormItem><FormLabel>Email do Colaborador</FormLabel><FormControl><Input placeholder="email.contato@cliente.com" {...field} /></FormControl><FormMessage /></FormItem>
+                            <FormItem><FormLabel>Email do Contato</FormLabel><FormControl><Input placeholder="email.contato@cliente.com" {...field} /></FormControl><FormMessage /></FormItem>
                          )} />
                          <FormField control={form.control} name="collaboratorPhone" render={({ field }) => (
-                            <FormItem><FormLabel>Telefone do Colaborador</FormLabel><FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>
+                            <FormItem><FormLabel>Telefone do Contato</FormLabel><FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>
                          )} />
                     </CardContent>
                 </Card>
                  <Card>
-                    <CardHeader>
-                        <CardTitle>Informações do Equipamento</CardTitle>
-                    </CardHeader>
+                    <CardHeader><CardTitle>Informações do Equipamento</CardTitle></CardHeader>
                     <CardContent className="space-y-4">
                          <FormField control={form.control} name="equipType" render={({ field }) => (
                             <FormItem><FormLabel>Tipo</FormLabel><FormControl><Input placeholder="Notebook, Desktop, Impressora..." {...field} /></FormControl><FormMessage /></FormItem>
@@ -207,7 +214,7 @@ export default function NewOsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Detalhes do Problema</CardTitle>
-                    <CardDescription>Descreva o problema relatado pelo cliente. O analista responsável será você.</CardDescription>
+                    <CardDescription>Descreva o problema relatado. O analista responsável será você.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <FormField control={form.control} name="problem" render={({ field }) => (

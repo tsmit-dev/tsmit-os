@@ -8,19 +8,21 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
 import { PackageCheck } from 'lucide-react';
 import { usePermissions } from '@/context/PermissionsContext';
+import { useStatuses } from '@/hooks/use-statuses'; // 1. Import useStatuses
 import { useToast } from '@/hooks/use-toast';
-import { Input } from '@/components/ui/input'; // Import Input
+import { Input } from '@/components/ui/input';
 
 export default function ReadyForPickupPage() {
     const [orders, setOrders] = useState<ServiceOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const { hasPermission, loadingPermissions } = usePermissions();
+    const { statuses, loading: loadingStatuses } = useStatuses(); // 2. Use the hook
     const router = useRouter();
     const { toast } = useToast();
-    const [searchTerm, setSearchTerm] = useState(''); // New state for search term
+    const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
-        if (!loadingPermissions) {
+        if (!loadingPermissions && !loadingStatuses) {
             if (!hasPermission('os')) {
                 toast({
                     title: "Acesso Negado",
@@ -32,13 +34,26 @@ export default function ReadyForPickupPage() {
             }
             fetchOrders();
         }
-    }, [loadingPermissions, hasPermission, router, toast]);
+    }, [loadingPermissions, loadingStatuses, hasPermission, router, toast, statuses]);
 
     const fetchOrders = async () => {
         setLoading(true);
         try {
+            // 3. Find the status ID for "Pronta para Entrega"
+            const readyStatus = statuses.find(
+                s => s.name.trim().toLowerCase() === 'pronta para entrega'
+            );
+
+            if (!readyStatus) {
+                console.warn("Status 'Pronta para Entrega' não encontrado nas configurações.");
+                setOrders([]); // Set to empty if status doesn't exist
+                setLoading(false);
+                return;
+            }
+
             const data = await getServiceOrders();
-            const filteredData = data.filter(order => order.status === 'pronta_entrega');
+            // 4. Filter by the found status ID
+            const filteredData = data.filter(order => order.status === readyStatus.id);
             setOrders(filteredData);
         } catch (error) {
             console.error("Failed to fetch service orders", error);
@@ -48,22 +63,28 @@ export default function ReadyForPickupPage() {
         }
     };
 
-    const filteredOrders = orders.filter(order =>
-        order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (order.clientName && order.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        order.equipment.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.equipment.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.equipment.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.equipment.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.analyst.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.status.toLowerCase().includes(searchTerm.toLowerCase())
-    ); // Filter orders based on search term
+    // The search filter now also uses the useStatuses hook to search by status name
+    const { getStatusById } = useStatuses();
+    const filteredOrders = orders.filter(order => {
+        const statusName = getStatusById(order.status)?.name || '';
+        return (
+            order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (order.clientName && order.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            order.equipment.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.equipment.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.equipment.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.equipment.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.analyst.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            statusName.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    });
 
-    if (loadingPermissions || !hasPermission('os') || loading) {
+    if (loadingPermissions || loadingStatuses || loading) {
         return (
             <div className="space-y-4 p-4 sm:p-6 lg:p-8">
                 <Skeleton className="h-10 w-1/3" />
                 <div className="border rounded-md p-4 space-y-2">
+                    <Skeleton className="h-8 w-full" />
                     <Skeleton className="h-8 w-full" />
                     <Skeleton className="h-8 w-full" />
                 </div>

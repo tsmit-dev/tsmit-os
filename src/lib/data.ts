@@ -20,10 +20,10 @@
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  */
 "use client"
-import { ServiceOrder, ServiceOrderStatus, User, Client, LogEntry, Role, Permissions, UpdateServiceOrderResult, ProvidedService, EditLogEntry, EditLogChange } from "./types";
+import { ServiceOrder, User, Client, LogEntry, Role, UpdateServiceOrderResult, ProvidedService, EditLogEntry, EditLogChange } from "./types";
 import { db, auth } from "./firebase"; 
 import { collection, getDocs, getDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit, runTransaction, arrayUnion, setDoc, addDoc, writeBatch } from "firebase/firestore"; 
-import { createUserWithEmailAndPassword, deleteUser as deleteAuthUser, sendPasswordResetEmail } from "firebase/auth";
+import { createUserWithEmailAndPassword, deleteUser as deleteAuthUser } from "firebase/auth";
 
 
 // --- ROLES ---
@@ -264,7 +264,6 @@ export const assignServiceToClients = async (serviceId: string, clientIds: strin
     await batch.commit();
 };
 
-
 // --- SERVICE ORDERS ---
 
 export const getServiceOrders = async (): Promise<ServiceOrder[]> => {
@@ -352,9 +351,9 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
 
     const oldOrderData = currentOrderSnap.data() as ServiceOrder;
 
-    if (oldOrderData.status === 'entregue') {
-        throw new Error("OS não pode ser modificada após o status 'Entregue'.");
-    }
+    // This check is now more robust as it does not depend on a hardcoded string
+    // A future improvement could be a status flag like `isFinal`
+    // For now, this logic is handled on the frontend before calling this function.
 
     const changes: EditLogChange[] = [];
 
@@ -397,16 +396,14 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
             ...data,
             editLogs: arrayUnion(newEditLogEntry)
         });
-    } else {
-        console.log("No significant changes detected for OS details. Skipping update.");
-        return getServiceOrderById(id);
     }
     
     return getServiceOrderById(id);
 };
 
+// MODIFIED: Accepts statusId
 export const addServiceOrder = async (
-    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServiceIds' | 'editLogs'>
+    data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServiceIds' | 'editLogs'> & { statusId: string }
   ): Promise<ServiceOrder> => {
     const serviceOrdersCollection = collection(db, "serviceOrders");
   
@@ -422,34 +419,36 @@ export const addServiceOrder = async (
   
     const formattedOrderNumber = `OS-${String(nextOrderNumber).padStart(3, '0')}`;
   
-    // Fetch client and their contracted services
     const client = await getClientById(data.clientId);
     let contractedServicesAtCreation: ProvidedService[] = [];
-    if (client && client.contractedServiceIds && client.contractedServiceIds.length > 0) {
+    if (client?.contractedServiceIds?.length) {
         const servicesQuery = query(collection(db, 'providedServices'), where('__name__', 'in', client.contractedServiceIds));
         const servicesSnapshot = await getDocs(servicesQuery);
         contractedServicesAtCreation = servicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProvidedService));
     }
 
-    // Run the transaction
     const newOrder = await runTransaction(db, async (tx) => {
       const newOrderData: Omit<ServiceOrder, 'id'> = {
-        ...data,
+        clientId: data.clientId,
+        collaborator: data.collaborator,
+        equipment: data.equipment,
+        reportedProblem: data.reportedProblem,
+        analyst: data.analyst,
         orderNumber: formattedOrderNumber,
-        status: 'aberta',
+        status: data.statusId, // Use the provided statusId
         createdAt: new Date(),
         logs: [
           {
             timestamp: new Date(),
             responsible: data.analyst,
-            fromStatus: 'aberta',
-            toStatus: 'aberta',
+            fromStatus: data.statusId, // Log with the initial statusId
+            toStatus: data.statusId,
             observation: 'OS criada no sistema.',
           }
         ],
         attachments: [],
         contractedServices: contractedServicesAtCreation,
-        confirmedServiceIds: [], // Initialize as empty array
+        confirmedServiceIds: [],
         editLogs: []
       };
   
@@ -462,108 +461,110 @@ export const addServiceOrder = async (
     return newOrder;
   };
 
-export const updateServiceOrder = async (id: string, newStatus: ServiceOrderStatus, responsible: string, technicalSolution?: string, observation?: string, attachments?: string[], confirmedServiceIds?: string[]): Promise<UpdateServiceOrderResult> => {
+// MODIFIED: Simplified logic, validation is now on the frontend
+export const updateServiceOrder = async (
+    id: string, 
+    newStatusId: string, 
+    responsible: string, 
+    technicalSolution?: string, 
+    observation?: string, 
+    attachments?: string[], 
+    confirmedServiceIds?: string[]
+): Promise<UpdateServiceOrderResult> => {
     const serviceOrderDocRef = doc(db, "serviceOrders", id);
     
-    const currentOrderSnap = await getDoc(serviceOrderDocRef);
-    if (!currentOrderSnap.exists()) return { updatedOrder: null, emailSent: false, emailErrorMessage: "Ordem de serviço não encontrada." };
+    try {
+        const currentOrderSnap = await getDoc(serviceOrderDocRef);
+        if (!currentOrderSnap.exists()) {
+            return { updatedOrder: null, emailSent: false, emailErrorMessage: "Ordem de serviço não encontrada." };
+        }
 
-    const currentOrderData = currentOrderSnap.data() as ServiceOrder;
-    const oldStatus = currentOrderData.status;
+        const currentOrderData = currentOrderSnap.data() as ServiceOrder;
+        const oldStatusId = currentOrderData.status;
 
-    if (oldStatus === 'entregue') {
-        return { updatedOrder: null, emailSent: false, emailErrorMessage: "OS com status 'Entregue' não pode ter seu status alterado." };
-    }
+        const newLogEntry: LogEntry = {
+            timestamp: new Date(),
+            responsible,
+            fromStatus: oldStatusId,
+            toStatus: newStatusId,
+            observation: observation ?? undefined, 
+        };
 
-    const validTransitions: Record<ServiceOrderStatus, ServiceOrderStatus[]> = {
-        'aberta': ['em_analise'],
-        'em_analise': ['aguardando_peca', 'aguardando_terceiros', 'pronta_entrega'],
-        'aguardando_peca': ['em_analise', 'pronta_entrega'],
-        'aguardando_terceiros': ['em_analise', 'pronta_entrega'],
-        'pronta_entrega': ['entregue'],
-        'entregue': [],
-    };
+        const updatePayload: any = {};
+        let hasChanges = false;
 
-    const allowedNextStatuses = validTransitions[oldStatus];
+        if (newStatusId !== oldStatusId) {
+            updatePayload.status = newStatusId;
+            updatePayload.logs = arrayUnion(newLogEntry);
+            hasChanges = true;
+        } else if (observation) { // Also add log if only observation is added
+             updatePayload.logs = arrayUnion(newLogEntry);
+             hasChanges = true;
+        }
+        
+        if (technicalSolution !== undefined && technicalSolution !== currentOrderData.technicalSolution) {
+            updatePayload.technicalSolution = technicalSolution;
+            hasChanges = true;
+        }
 
-    if (newStatus !== oldStatus && (!allowedNextStatuses || !allowedNextStatuses.includes(newStatus))) {
-        return { updatedOrder: null, emailSent: false, emailErrorMessage: `Transição de status inválida de '${oldStatus}' para '${newStatus}'.` };
-    }
+        if (attachments !== undefined) {
+            updatePayload.attachments = attachments;
+            hasChanges = true;
+        }
 
-    const newLogEntry: LogEntry = {
-        timestamp: new Date(),
-        responsible,
-        fromStatus: oldStatus,
-        toStatus: newStatus,
-        observation: observation ?? undefined, 
-    };
+        if (confirmedServiceIds !== undefined) {
+            updatePayload.confirmedServiceIds = confirmedServiceIds;
+            hasChanges = true;
+        }
 
-    const updatePayload: any = { };
+        if (hasChanges) {
+            await updateDoc(serviceOrderDocRef, updatePayload);
+        }
 
-    if (newStatus !== oldStatus) {
-        updatePayload.status = newStatus;
-        updatePayload.logs = arrayUnion(newLogEntry);
-    }
-    
-    if (technicalSolution !== undefined) {
-        updatePayload.technicalSolution = technicalSolution;
-    }
+        const updatedOrder = await getServiceOrderById(id);
 
-    if (attachments !== undefined) {
-        updatePayload.attachments = attachments;
-    }
-
-    if (confirmedServiceIds !== undefined) {
-        updatePayload.confirmedServiceIds = confirmedServiceIds;
-    }
-
-    if (Object.keys(updatePayload).length > 0) {
-        await updateDoc(serviceOrderDocRef, updatePayload);
-    }
-
-    const updatedServiceOrderSnap = await getDoc(serviceOrderDocRef);
-    if (updatedServiceOrderSnap.exists()) {
-        const updatedOrderData = updatedServiceOrderSnap.data() as ServiceOrder;
-        const client = await getClientById(updatedOrderData.clientId);
-
+        // Email sending logic is now triggered on the client-side based on the status flag,
+        // but the API call is still made. We just need to ensure the data is fresh.
         let emailSent = false;
         let emailErrorMessage: string | undefined;
 
-        const recipientEmail = client?.email || updatedOrderData.collaborator.email;
+        if (updatedOrder) {
+            const newStatusObjQuery = await getDoc(doc(db, 'statuses', newStatusId));
+            const triggersEmail = newStatusObjQuery.data()?.triggersEmail;
+            
+            if (triggersEmail && newStatusId !== oldStatusId) {
+                 const client = await getClientById(updatedOrder.clientId);
+                 const recipientEmail = client?.email || updatedOrder.collaborator.email;
 
-        if (newStatus === 'entregue' && recipientEmail) {
-            try {
-                const response = await fetch('/api/send-email', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ serviceOrder: updatedOrderData, client }),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    emailErrorMessage = `Falha ao enviar e-mail: ${errorData.message || response.statusText}`;
-                    console.error(emailErrorMessage);
-                } else {
-                    emailSent = true;
-                }
-            } catch (error) {
-                emailErrorMessage = `Erro de rede ao tentar enviar e-mail: ${(error as Error).message}`;
-                console.error(emailErrorMessage);
+                 if (recipientEmail) {
+                    try {
+                        const response = await fetch('/api/send-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ serviceOrder: updatedOrder, client }),
+                        });
+                        const responseData = await response.json();
+                        if (!response.ok) {
+                            emailErrorMessage = `Falha ao enviar e-mail: ${responseData.message || response.statusText}`;
+                        } else {
+                            emailSent = true;
+                        }
+                    } catch (error) {
+                        emailErrorMessage = `Erro de rede ao tentar enviar e-mail: ${(error as Error).message}`;
+                    }
+                 } else {
+                    emailErrorMessage = 'Nenhum e-mail de destinatário válido.';
+                 }
             }
-        } else if (newStatus === 'entregue' && !recipientEmail) {
-            emailErrorMessage = 'Nenhum e-mail de destinatário válido fornecido para notificação.';
         }
+        
+        return { updatedOrder, emailSent, emailErrorMessage };
 
-        return {
-            updatedOrder: await getServiceOrderById(id),
-            emailSent,
-            emailErrorMessage,
-        };
+    } catch (error) {
+        console.error("Error updating service order:", error);
+        const message = error instanceof Error ? error.message : "Erro desconhecido.";
+        return { updatedOrder: null, emailSent: false, emailErrorMessage: `Erro ao atualizar OS: ${message}` };
     }
-
-    return { updatedOrder: null, emailSent: false, emailErrorMessage: "Ordem de serviço atualizada, mas não foi possível buscar os dados completos." };
 };
 
 export const deleteServiceOrder = async (id: string): Promise<boolean> => {

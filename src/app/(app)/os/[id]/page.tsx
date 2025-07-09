@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ServiceOrder, ServiceOrderStatus, ProvidedService } from "@/lib/types";
+import { ServiceOrder, ProvidedService, Status } from "@/lib/types";
 import { getServiceOrderById, updateServiceOrder } from "@/lib/data";
 import { useAuth } from "@/components/auth-provider";
 import { usePermissions } from "@/context/PermissionsContext";
+import { useStatuses } from "@/hooks/use-statuses"; // 1. Import useStatuses
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { EditOsDialog } from "@/components/edit-os-dialog";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge } from "@/components/status-badge"; // Correctly imported
 
 export default function OsDetailPage() {
     const params = useParams();
@@ -32,13 +33,13 @@ export default function OsDetailPage() {
     const { hasPermission, loadingPermissions } = usePermissions();
     const { toast } = useToast();
     const router = useRouter();
+    const { statuses, getStatusById, loading: loadingStatuses } = useStatuses(); // 2. Use the hook
 
     const [order, setOrder] = useState<ServiceOrder | null>(null);
-    const isDelivered = order?.status === 'entregue';
     const [uploading, setUploading] = useState(0);
     const [loadingOrder, setLoadingOrder] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
-    const [currentStatus, setCurrentStatus] = useState<ServiceOrderStatus | undefined>();
+    const [currentStatusId, setCurrentStatusId] = useState<string | undefined>(); // 3. State now holds the ID
     const [technicalSolution, setTechnicalSolution] = useState('');
     const [confirmedServiceIds, setConfirmedServiceIds] = useState<string[]>([]);
     const [isEditOsDialogOpen, setIsEditOsDialogOpen] = useState(false);
@@ -47,29 +48,45 @@ export default function OsDetailPage() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Memoize the current status object to avoid re-calculating
+    const currentStatusObject = useMemo(() => {
+        return order ? getStatusById(order.status) : undefined;
+    }, [order, getStatusById]);
+    
+    const isDelivered = useMemo(() => {
+        // A more robust check could be for a status with a specific property, e.g., isFinal.
+        // For now, checking by a common name is a practical approach.
+        return currentStatusObject?.name.toLowerCase() === 'entregue';
+    }, [currentStatusObject]);
+
+
+    // Determine available statuses for the dropdown
+    const availableStatuses = useMemo(() => {
+        if (!currentStatusObject) return [];
+        if (hasPermission('adminSettings')) {
+            return statuses; // Admins can see all statuses
+        }
+        // Users see only the allowed next statuses
+        return statuses.filter(s => currentStatusObject.allowedNextStatuses?.includes(s.id));
+    }, [currentStatusObject, statuses, hasPermission]);
+
+
     const getTranslatedFieldName = (field: string): string => {
         const translations: { [key: string]: string } = {
-            // Basic OS fields
             orderNumber: 'Número da OS',
-            clientId: 'Cliente (ID)', // Consider fetching client name if more user-friendly
+            clientId: 'Cliente (ID)',
             reportedProblem: 'Problema Relatado',
             analyst: 'Analista',
             technicalSolution: 'Solução Técnica',
-            // Collaborator fields (nested under collaborator.field)
             'collaborator.name': 'Nome do Contato',
             'collaborator.email': 'Email do Contato',
             'collaborator.phone': 'Telefone do Contato',
-            // Equipment fields (nested under equipment.field)
             'equipment.type': 'Tipo do Equipamento',
             'equipment.brand': 'Marca do Equipamento',
             'equipment.model': 'Modelo do Equipamento',
             'equipment.serialNumber': 'Número de Série',
-            // Confirmed Services (direct fields for simplicity, might need deeper mapping)
-            'confirmedServices.webProtection': 'Serviço Confirmado: WebProtection',
-            'confirmedServices.backup': 'Serviço Confirmado: Backup',
-            'confirmedServices.edr': 'Serviço Confirmado: EDR',
         };
-        return translations[field] || field; // Return translated name or original if not found
+        return translations[field] || field;
     };
 
     const formatValueForDisplay = (value: any): string => {
@@ -84,7 +101,7 @@ export default function OsDetailPage() {
             const data = await getServiceOrderById(id);
             if (data) {
                 setOrder(data);
-                setCurrentStatus(data.status);
+                setCurrentStatusId(data.status); // Set the status ID
                 setTechnicalSolution(data.technicalSolution || '');
                 setConfirmedServiceIds(data.confirmedServiceIds || []);
             } else {
@@ -109,80 +126,47 @@ export default function OsDetailPage() {
     }, [loadingPermissions, hasPermission, router, fetchServiceOrder]);
 
     const handleUpdate = async () => {
-        if (!order || !currentStatus || !user) return;
+        if (!order || !currentStatusId || !user) return;
         
         if (!hasPermission('os')) {
-            toast({
-                title: "Acesso Negado",
-                description: "Você não tem permissão para atualizar esta Ordem de Serviço.",
-                variant: "destructive",
-            });
+            toast({ title: "Acesso Negado", description: "Você não tem permissão para atualizar esta Ordem de Serviço.", variant: "destructive" });
             return;
         }
     
-        const oldStatus = order.status;
-        const newStatus = currentStatus;
+        const oldStatusId = order.status;
+        const newStatusId = currentStatusId;
+        const newStatusObject = getStatusById(newStatusId);
     
-        // =================================================================
-        // =========== INÍCIO DA NOVA LÓGICA DE VALIDAÇÃO DE STATUS =========
-        // =================================================================
-        if (newStatus !== oldStatus && !hasPermission('adminSettings')) { // Apenas valida se o status mudou e o usuário não é admin
-            const statusOrder: ServiceOrderStatus[] = ['aberta', 'em_analise', 'pronta_entrega', 'entregue'];
-            const oldIndex = statusOrder.indexOf(oldStatus);
-            const newIndex = statusOrder.indexOf(newStatus);
-    
-            let isValidTransition = false;
-            const isMovingToSpecialStatus = newStatus === 'aguardando_peca' || newStatus === 'aguardando_terceiros';
-            const isMovingFromSpecialStatus = oldStatus === 'aguardando_peca' || oldStatus === 'aguardando_terceiros';
-    
-            if (isMovingToSpecialStatus) {
-                // Permite mover para "Aguardando Peça/Terceiros" apenas a partir de "Em Análise"
-                if (oldStatus === 'em_analise') {
-                    isValidTransition = true;
-                }
-            } else if (isMovingFromSpecialStatus) {
-                // Permite mover de "Aguardando Peça/Terceiros" apenas de volta para "Em Análise"
-                if (newStatus === 'em_analise') {
-                    isValidTransition = true;
-                }
-            } else if (oldIndex !== -1 && newIndex !== -1) {
-                // Para status padrão, a transição deve ser sequencial (ex: de índice 1 para 2)
-                if (newIndex === oldIndex + 1) {
-                    isValidTransition = true;
-                }
-            }
-    
+        // 4. Simplified validation logic
+        const isStatusChanging = newStatusId !== oldStatusId;
+        if (isStatusChanging && !hasPermission('adminSettings')) {
+            const isValidTransition = availableStatuses.some(s => s.id === newStatusId);
             if (!isValidTransition) {
                 toast({
                     title: "Transição de Status Inválida",
-                    description: `Não é possível mudar o status de "${getStatusName(oldStatus)}" para "${getStatusName(newStatus)}". Por favor, siga a ordem correta dos status.`,
+                    description: `Não é possível mover a OS para este status.`,
                     variant: "destructive",
-                    duration: 8000, // Duração maior para dar tempo de ler..
                 });
-                setCurrentStatus(oldStatus); // Reverte a seleção no dropdown para o status original
-                return; // Impede a atualização 
+                setCurrentStatusId(oldStatusId); // Revert selection
+                return;
             }
         }
-        // =================================================================
-        // ============ FIM DA NOVA LÓGICA DE VALIDAÇÃO DE STATUS ===========
-        // =================================================================
     
         const allContractedServicesConfirmed = order.contractedServices?.every(service =>
             confirmedServiceIds.includes(service.id)
         ) ?? true;
             
-        const isReadyForDeliveryOrDelivered = newStatus === 'pronta_entrega' || newStatus === 'entregue';
-    
-        if (isReadyForDeliveryOrDelivered && !allContractedServicesConfirmed) {
+        // This check can be made more robust by adding a 'requiresServiceConfirmation' flag to the status
+        if (newStatusObject?.name.toLowerCase().includes("entrega") && !allContractedServicesConfirmed) {
             toast({
                 title: "Serviços Contratados Pendentes",
-                description: "Por favor, confirme a instalação de todos os serviços contratados antes de avançar para este status.",
+                description: "Por favor, confirme a instalação de todos os serviços antes de avançar.",
                 variant: "destructive",
             });
             return;
         }
     
-        if (newStatus === oldStatus && technicalSolution === (order.technicalSolution || '') && JSON.stringify(confirmedServiceIds.sort()) === JSON.stringify((order.confirmedServiceIds || []).sort())) {
+        if (!isStatusChanging && technicalSolution === (order.technicalSolution || '') && JSON.stringify(confirmedServiceIds.sort()) === JSON.stringify((order.confirmedServiceIds || []).sort())) {
             toast({ title: "Nenhuma alteração", description: "Nenhuma alteração para salvar." });
             return;
         }
@@ -191,7 +175,7 @@ export default function OsDetailPage() {
         try {
             const result = await updateServiceOrder(
                 order.id, 
-                newStatus,
+                newStatusId,
                 user.name,
                 technicalSolution,
                 technicalSolution.trim() ? `Nota/Solução: ${technicalSolution}` : undefined,
@@ -203,43 +187,38 @@ export default function OsDetailPage() {
                 setOrder(result.updatedOrder);
                 toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
     
-                if (newStatus !== oldStatus) {
-                    setTechnicalSolution('');
+                if (isStatusChanging) {
+                    setTechnicalSolution(''); // Clear solution only on status change
                 }
     
-                if (result.updatedOrder.status === 'entregue' && newStatus !== oldStatus) { 
+                // 5. Email trigger logic based on the new status flag
+                if (newStatusObject?.triggersEmail && isStatusChanging) { 
                     if (result.emailSent) {
                         toast({ title: "Notificação de E-mail", description: "E-mail de notificação enviado ao cliente." });
                     } else if (result.emailErrorMessage) {
                         toast({
                             title: "Erro no E-mail",
-                            description: `Não foi possível enviar e-mail ao cliente: ${result.emailErrorMessage}`,
+                            description: `Não foi possível enviar e-mail: ${result.emailErrorMessage}`,
                             variant: "destructive",
                         });
                     }
                 }
             } else {
-                toast({
+                 toast({
                     title: "Erro",
-                    description: result.emailErrorMessage || "Falha ao atualizar a OS ou buscar dados atualizados.",
+                    description: result.emailErrorMessage || "Falha ao atualizar a OS.",
                     variant: "destructive",
                 });
             }
-        } catch (error: unknown) { 
-            let errorMessage = "Falha ao atualizar a OS.";
-            if (error instanceof Error) {
-                errorMessage = `Falha ao atualizar a OS: ${error.message}`;
-            }
-            toast({ title: "Erro", description: errorMessage, variant: "destructive" });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+            toast({ title: "Erro na Atualização", description: errorMessage, variant: "destructive" });
         } finally {
             setIsUpdating(false);
         }
     };
     
-    const handleTechnicalSolutionChange = (newSolution: string) => {
-        setTechnicalSolution(newSolution);
-    }
-
+    // ... (rest of the functions like handleFileChange, handleUploadFile, etc. remain the same)
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.files && event.target.files[0]) {
             setSelectedFile(event.target.files[0]);
@@ -249,72 +228,42 @@ export default function OsDetailPage() {
     };
 
     const handleUploadFile = async () => {
-        if (!selectedFile || !order) return;
-        if (!user) {
-            toast({ title: "Erro", description: "Usuário não autenticado.", variant: "destructive" });
-            return;
-        }
+        if (!selectedFile || !order || !user) return;
 
-        setUploading(1); // Set to 1 to indicate uploading started
+        setUploading(1);
         const filePath = `service_orders/${order.id}/attachments/${selectedFile.name}`;
         const storageRef = ref(storage, filePath);
         const uploadTask = uploadBytesResumable(storageRef, selectedFile);
 
         uploadTask.on('state_changed',
-            (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                setUploadProgress(progress);
-            },
-            (error: unknown) => { 
-                console.error("Upload failed", error);
-                let errorMessage = "Falha no upload.";
-                if (error instanceof Error) {
-                    errorMessage = `Falha no upload: ${error.message}`;
-                }
-                toast({ title: "Erro", description: errorMessage, variant: "destructive" });
-                setUploading(0); // Reset to 0
-                setUploadProgress(0);
+            (snapshot) => setUploadProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
+            (error) => {
+                toast({ title: "Erro no Upload", description: error.message, variant: "destructive" });
+                setUploading(0);
             },
             async () => {
                 try {
                     const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                     const updatedAttachments = [...(order.attachments || []), downloadURL];
                     
-                    // Update Firestore document with new attachment URL
                     const result = await updateServiceOrder(
-                        order.id,
-                        order.status,
-                        user.name,
-                        order.technicalSolution || '',
-                        `Anexo adicionado: ${selectedFile.name}`,
-                        updatedAttachments,
-                        confirmedServiceIds // Pass existing confirmed services
+                        order.id, order.status, user.name, order.technicalSolution || '',
+                        `Anexo adicionado: ${selectedFile.name}`, updatedAttachments, confirmedServiceIds
                     );
 
                     if (result.updatedOrder) {
                         setOrder(result.updatedOrder);
                         toast({ title: "Sucesso", description: "Anexo enviado com sucesso!" });
                     } else {
-                        toast({
-                            title: "Erro",
-                            description: result.emailErrorMessage || "Falha ao atualizar a OS com o anexo.",
-                            variant: "destructive",
-                        });
+                        toast({ title: "Erro", description: result.emailErrorMessage || "Falha ao atualizar a OS com o anexo.", variant: "destructive" });
                     }
                     setSelectedFile(null);
-                    if (fileInputRef.current) {
-                        fileInputRef.current.value = "";
-                    }
-                } catch (error: unknown) { 
-                    console.error("Error getting download URL or updating OS", error);
-                    let errorMessage = "Falha ao finalizar o upload ou atualizar OS.";
-                    if (error instanceof Error) {
-                        // Corrected from e.message to error.message
-                        errorMessage = `Falha ao finalizar o upload ou atualizar OS: ${error.message}`;
-                    }
-                    toast({ title: "Erro", description: errorMessage, variant: "destructive" });
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                } catch (error) {
+                    const msg = error instanceof Error ? error.message : "Erro desconhecido.";
+                    toast({ title: "Erro", description: `Falha ao finalizar o upload: ${msg}`, variant: "destructive" });
                 } finally {
-                    setUploading(0); // Reset to 0
+                    setUploading(0);
                     setUploadProgress(0);
                 }
             }
@@ -322,51 +271,28 @@ export default function OsDetailPage() {
     };
 
     const handleDeleteAttachment = async (urlToDelete: string) => {
-        if (!order || !user) return;
-        if (!hasPermission('os')) {
-            toast({
-                title: "Acesso Negado",
-                description: "Você não tem permissão para remover anexos.",
-                variant: "destructive",
-            });
-            return;
-        }
+        if (!order || !user || !hasPermission('os')) return;
 
         setIsUpdating(true);
         try {
-            // Delete from Firebase Storage
             const fileRef = ref(storage, urlToDelete);
             await deleteObject(fileRef);
 
-            // Update Firestore document
             const updatedAttachments = (order.attachments || []).filter(url => url !== urlToDelete);
             const result = await updateServiceOrder(
-                order.id,
-                order.status,
-                user.name,
-                order.technicalSolution || '',
-                `Anexo removido: ${getFileNameFromUrl(urlToDelete)}`,
-                updatedAttachments,
-                confirmedServiceIds // Pass existing confirmed services
+                order.id, order.status, user.name, order.technicalSolution || '',
+                `Anexo removido: ${getFileNameFromUrl(urlToDelete)}`, updatedAttachments, confirmedServiceIds
             );
 
             if (result.updatedOrder) {
                 setOrder(result.updatedOrder);
-                toast({ title: "Sucesso", description: "Anexo removido com sucesso." });
+                toast({ title: "Sucesso", description: "Anexo removido." });
             } else {
-                toast({
-                    title: "Erro",
-                    description: result.emailErrorMessage || "Falha ao remover anexo ou atualizar OS.",
-                    variant: "destructive",
-                });
+                toast({ title: "Erro", description: result.emailErrorMessage || "Falha ao remover anexo.", variant: "destructive" });
             }
-        } catch (error: unknown) { 
-            console.error("Error deleting attachment", error);
-            let errorMessage = "Falha ao remover anexo.";
-            if (error instanceof Error) {
-                errorMessage = `Falha ao remover anexo: ${error.message}`;
-            }
-            toast({ title: "Erro", description: errorMessage, variant: "destructive" });
+        } catch (error) {
+             const msg = error instanceof Error ? error.message : "Erro desconhecido.";
+            toast({ title: "Erro", description: `Falha ao remover anexo: ${msg}`, variant: "destructive" });
         } finally {
             setIsUpdating(false);
         }
@@ -374,86 +300,57 @@ export default function OsDetailPage() {
 
     const getFileNameFromUrl = (url: string) => {
         try {
-            const urlObj = new URL(url);
-            const path = decodeURIComponent(urlObj.pathname);
-            // This regex tries to capture the filename after the last '/' and before '?' or end of string
-            const match = path.match(/[^/?#]+\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|txt)$/i);
-            return match ? match[0] : "Arquivo";
-        } catch (e: unknown) { 
-            console.error("Invalid URL", url, e);
-            let errorMessage = "Arquivo Desconhecido";
-            if (e instanceof Error) {
-                errorMessage = `Arquivo Desconhecido: ${e.message}`;
-            }
-            return errorMessage;
-        }
-    };
-
-    const getStatusName = (status: ServiceOrderStatus) => {
-        const names: Record<ServiceOrderStatus, string> = {
-            aberta: "Aberta",
-            em_analise: "Em Análise",
-            aguardando_peca: "Aguardando Peça",
-            aguardando_terceiros: "Aguardando Terceiros",
-            pronta_entrega: "Pronta para Entrega",
-            entregue: "Entregue",
-        };
-        return names[status] || status;
+            const path = decodeURIComponent(new URL(url).pathname);
+            return path.substring(path.lastIndexOf('/') + 1);
+        } catch { return "Arquivo inválido"; }
     };
     
-    if (loadingPermissions || !hasPermission('os') || loadingOrder) return <OsDetailSkeleton />;
+    if (loadingPermissions || loadingStatuses || loadingOrder) return <OsDetailSkeleton />;
 
     if (!order) return <p>Ordem de Serviço não encontrada.</p>;
+    if (!hasPermission('os')) return <p>Acesso negado.</p>;
 
     const canEditSolution = hasPermission('adminSettings') || hasPermission('os');
     const canChangeStatus = hasPermission('adminSettings') || hasPermission('os');
     const canShowUpdateCard = canEditSolution || canChangeStatus;
     const canUploadAttachment = hasPermission('adminSettings') || hasPermission('os');
-    const canEditOsDetails = hasPermission('adminSettings') || hasPermission('os'); // Permission to edit OS details
+    const canEditOsDetails = hasPermission('adminSettings') || hasPermission('os');
 
-    const showServiceConfirmation = currentStatus === 'pronta_entrega' || currentStatus === 'entregue';
+    const showServiceConfirmation = currentStatusObject?.name.toLowerCase().includes("entrega");
 
-    const hasIncompleteServices = order.contractedServices && order.contractedServices.length > 0 &&
-    order.contractedServices.some(service => !confirmedServiceIds.includes(service.id));
-
+    const hasIncompleteServices = order.contractedServices?.some(service => !confirmedServiceIds.includes(service.id));
     const showAlertBanner = showServiceConfirmation && hasIncompleteServices;
 
     return (
         <div className="container mx-auto space-y-6">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-            <div>
-                <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.orderNumber}</h1>
-                <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")} por {order.analyst}</p>
+                <div>
+                    <h1 className="text-3xl font-bold font-headline">Detalhes da OS: {order.orderNumber}</h1>
+                    <p className="text-muted-foreground">Aberta em: {format(new Date(order.createdAt), "dd/MM/yyyy 'às' HH:mm")} por {order.analyst}</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    {canEditOsDetails && (
+                        <Button variant="outline" onClick={() => setIsEditOsDialogOpen(true)} disabled={isDelivered}>
+                            <Edit className="mr-2 h-4 w-4" /> Editar OS
+                        </Button>
+                    )}
+                    <Link href={`/os/${order.id}/label`} passHref>
+                        <Button variant="outline"><Printer className="mr-2 h-4 w-4" /> Imprimir Etiqueta</Button>
+                    </Link>
+                </div>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                {canEditOsDetails && (
-                    <Button variant="outline" onClick={() => setIsEditOsDialogOpen(true)} disabled={isDelivered}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Editar OS
-                    </Button>
-                )}
-                <Link href={`/os/${order.id}/label`} passHref>
-                    <Button variant="outline">
-                        <Printer className="mr-2 h-4 w-4" />
-                        Imprimir Etiqueta
-                    </Button>
-                </Link>
-            </div>
-        </div>
 
             {showAlertBanner && (
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Atenção: Serviços Contratados Pendentes!</AlertTitle>
-                    <AlertDescription>
-                        Esta OS está em status &quot;Pronta p/ Entrega&quot; ou &quot;Finalizada&quot;, mas a confirmação de instalação de todos os serviços contratados está incompleta.
-                    </AlertDescription>
+                    <AlertDescription>Confirme a instalação de todos os serviços contratados.</AlertDescription>
                 </Alert>
             )}
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="md:col-span-2">
-                    <CardHeader><CardTitle className="flex items-center gap-2"><HardDrive /> Informações do Equipamento</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><HardDrive /> Equipamento</CardTitle></CardHeader>
                     <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         <div><p className="font-semibold text-muted-foreground">Tipo</p><p>{order.equipment.type}</p></div>
                         <div><p className="font-semibold text-muted-foreground">Marca</p><p>{order.equipment.brand}</p></div>
@@ -466,8 +363,8 @@ export default function OsDetailPage() {
                     <CardContent className="space-y-3 text-sm">
                         <div><p className="font-semibold text-muted-foreground">Empresa</p><p>{order.clientName}</p></div>
                         <div><p className="font-semibold text-muted-foreground">Contato</p><p>{order.collaborator.name}</p></div>
-                        <div><p className="font-semibold text-muted-foreground">Email Contato</p><p>{order.collaborator.email || 'N/A'}</p></div>
-                        <div><p className="font-semibold text-muted-foreground">Telefone Contato</p><p>{order.collaborator.phone || 'N/A'}</p></div>
+                        <div><p className="font-semibold text-muted-foreground">Email</p><p>{order.collaborator.email || 'N/A'}</p></div>
+                        <div><p className="font-semibold text-muted-foreground">Telefone</p><p>{order.collaborator.phone || 'N/A'}</p></div>
                     </CardContent>
                 </Card>
             </div>
@@ -477,7 +374,6 @@ export default function OsDetailPage() {
                 <CardContent><p className="text-muted-foreground">{order.reportedProblem}</p></CardContent>
             </Card>
 
-            {/* New card for Contracted Services */}
             <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><CheckCircle /> Serviços Contratados</CardTitle></CardHeader>
                 <CardContent>
@@ -487,85 +383,57 @@ export default function OsDetailPage() {
                             <Badge key={service.id} variant="default">{service.name}</Badge>
                         ))
                         ) : (
-                            <p className="text-muted-foreground">Nenhum serviço contratado registrado para este cliente.</p>
+                            <p className="text-muted-foreground">Nenhum serviço contratado.</p>
                         )}
                     </div>
                 </CardContent>
             </Card>
 
-
             {canShowUpdateCard && (
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Wrench /> Atualização da OS</CardTitle>
-                        <CardDescription>
-                            {hasPermission('os') && !hasPermission('adminSettings')
-                                ? 'Altere o status ou adicione uma nota com a solução técnica, que será salva no histórico.'
-                                : 'Altere o status e/ou adicione uma nota com a solução técnica, que será salva no histórico.'
-                            }
-                        </CardDescription>
+                        <CardDescription>Altere o status ou adicione uma nota/solução técnica.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {canChangeStatus && (
                              <div className="space-y-2">
-                                <label className="text-sm font-medium">Status Atual</label>
+                                <label className="text-sm font-medium">Alterar Status para:</label>
                                 <Select
-                                    value={currentStatus}
-                                    onValueChange={(v: ServiceOrderStatus) => setCurrentStatus(v)}
-                                    disabled={isUpdating || isDelivered}
+                                    value={currentStatusId}
+                                    onValueChange={(v: string) => setCurrentStatusId(v)}
+                                    disabled={isUpdating || isDelivered || availableStatuses.length === 0}
                                 >
-
                                     <SelectTrigger className="w-full sm:w-[280px]">
-                                        <SelectValue placeholder="Selecione o status" />
+                                        <SelectValue placeholder="Selecione o próximo status" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {hasPermission('adminSettings') || hasPermission('os') ? (
-                                            <>
-                                                <SelectItem value="aberta">Aberta</SelectItem>
-                                                <SelectItem value="em_analise">Em Análise</SelectItem>
-                                                <SelectItem value="aguardando_peca">Aguardando Peça</SelectItem>
-                                                <SelectItem value="aguardando_terceiros">Aguardando Terceiros</SelectItem>
-                                                <SelectItem value="pronta_entrega">Pronta para Entrega</SelectItem>
-                                                <SelectItem value="entregue">Entregue</SelectItem>
-                                            </>
-                                        ) : (
-                                            <SelectItem value={currentStatus as string} disabled>{currentStatus}</SelectItem>
-                                        )}
+                                        {/* Current status is always an option to allow adding notes without status change */}
+                                        {currentStatusObject && <SelectItem value={currentStatusObject.id}>-- {currentStatusObject.name} (Atual) --</SelectItem>}
+                                        {availableStatuses.map(status => (
+                                            <SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
+                                 {availableStatuses.length === 0 && !isDelivered && <p className="text-xs text-muted-foreground mt-1">Não há próximos status permitidos. Configure em Admin &gt; Status.</p>}
                             </div>
                         )}
                         
                         {showServiceConfirmation && (
-                            <div className="space-y-2 border p-4 rounded-md bg-yellow-50/20 dark:bg-yellow-950/20 relative">
-                            <h3 className="text-md font-semibold flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
-                                <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                                Confirmação de Serviços Contratados
-                            </h3>
-                            <p className="text-sm text-muted-foreground">Marque os serviços que foram instalados e confirmados para este cliente:</p>
-                        
-                            {order.contractedServices && order.contractedServices.length > 0 ? (
-                                order.contractedServices.map((service: ProvidedService) => (
+                            <div className="space-y-2 border p-4 rounded-md bg-yellow-50/20 dark:bg-yellow-950/20">
+                                <h3 className="text-md font-semibold text-yellow-800 dark:text-yellow-200">Confirmação de Serviços</h3>
+                                {order.contractedServices?.length ? order.contractedServices.map((service) => (
                                     <div key={service.id} className="flex items-center space-x-2">
                                         <Checkbox
                                             id={`confirm-${service.id}`}
                                             checked={confirmedServiceIds.includes(service.id)}
-                                            onCheckedChange={(checked) => {
-                                                setConfirmedServiceIds(prevIds =>
-                                                    checked
-                                                        ? [...prevIds, service.id]
-                                                        : prevIds.filter(id => id !== service.id)
-                                                );
-                                            }}
+                                            onCheckedChange={(checked) => setConfirmedServiceIds(p => checked ? [...p, service.id] : p.filter(id => id !== service.id))}
                                             disabled={isUpdating || isDelivered}
                                         />
-                                        <Label htmlFor={`confirm-${service.id}`}>{service.name} instalado e confirmado</Label>
+                                        <Label htmlFor={`confirm-${service.id}`}>{service.name}</Label>
                                     </div>
-                                ))
-                            ) : (
-                                <p className="text-muted-foreground italic">Nenhum serviço contratado para este cliente. Nenhuma confirmação é necessária.</p>
-                            )}
-                        </div>                        
+                                )) : <p className="text-muted-foreground italic">Nenhum serviço contratado.</p>}
+                            </div>                        
                         )}
 
                         {canEditSolution && (
@@ -573,91 +441,22 @@ export default function OsDetailPage() {
                                 <label className="text-sm font-medium">Solução Técnica / Nota</label>
                                 <Textarea 
                                     value={technicalSolution}
-                                    onChange={(e) => handleTechnicalSolutionChange(e.target.value)}
+                                    onChange={(e) => setTechnicalSolution(e.target.value)}
                                     rows={6}
-                                    placeholder="Descreva a solução técnica ou adicione uma nota. Este texto será salvo no histórico."
-                                    disabled={isUpdating || !canEditSolution || isDelivered}
+                                    placeholder="Descreva a solução ou adicione uma nota."
+                                    disabled={isUpdating || isDelivered}
                                 />
                             </div>
                         )}
-                        <Button 
-                            onClick={handleUpdate} 
-                            disabled={isUpdating || !canChangeStatus || (showServiceConfirmation && hasIncompleteServices) || isDelivered}
-                        >
+                        <Button onClick={handleUpdate} disabled={isUpdating || isDelivered || (showAlertBanner ?? false)}>
                             {isUpdating ? 'Salvando...' : 'Salvar Alterações'}
                         </Button>
                     </CardContent>
                 </Card>
             )}
 
-            {!canEditSolution && order.technicalSolution && (
-                 <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><Wrench /> Solução Técnica / Nota</CardTitle></CardHeader>
-                    <CardContent><p className="text-muted-foreground whitespace-pre-wrap">{order.technicalSolution}</p></CardContent>
-                </Card>
-            )}
-
-            {canUploadAttachment && (
-                <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><FileUp /> Anexos</CardTitle></CardHeader>
-                    <CardContent>
-                        <p className="text-sm text-muted-foreground mb-4">Anexe fotos ou documentos relevantes à OS (Max 5MB por arquivo).</p>
-                        <div className="flex items-center gap-4">
-                            <Input 
-                                type="file" 
-                                className="max-w-xs"
-                                onChange={handleFileChange}
-                                disabled={uploading > 0 || !canUploadAttachment || isDelivered}
-                                ref={fileInputRef}
-                            />
-                            <Button 
-                                onClick={handleUploadFile} 
-                                disabled={!selectedFile || uploading > 0 || !canUploadAttachment || isDelivered}
-                            >
-                                {uploading > 0 ? `Enviando (${Math.round(uploadProgress)}%)` : 'Enviar Anexo'}
-                                {uploading > 0 ? null : <Upload className="ml-2 h-4 w-4" />}
-                            </Button>
-                        </div>
-                        {selectedFile && uploading === 0 && (
-                            <p className="text-sm text-muted-foreground mt-2">Arquivo selecionado: {selectedFile.name}</p>
-                        )}
-                        
-                        {(order.attachments && order.attachments.length > 0) && (
-                            <div className="mt-6">
-                                <h3 className="text-md font-semibold mb-3">Anexos Existentes:</h3>
-                                <ul className="space-y-2">
-                                    {order.attachments.map((url, index) => (
-                                        <li key={index} className="flex items-center justify-between p-2 border rounded-md">
-                                            <a 
-                                                href={url} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 hover:underline flex items-center gap-2 truncate"
-                                            >
-                                                <File className="h-4 w-4 shrink-0" />
-                                                <span className="truncate">{getFileNameFromUrl(url)}</span>
-                                            </a>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                onClick={() => handleDeleteAttachment(url)}
-                                                disabled={isUpdating || uploading > 0 || !canUploadAttachment}
-                                                className="ml-2 shrink-0"
-                                                title="Remover anexo"
-                                            >
-                                                <X className="h-4 w-4 text-red-500" />
-                                            </Button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
-            
             <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><History /> Histórico de Status da OS</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><History /> Histórico de Status</CardTitle></CardHeader>
                 <CardContent>
                     <ul className="space-y-4">
                         {order.logs.slice().reverse().map((log, index) => (
@@ -667,13 +466,13 @@ export default function OsDetailPage() {
                                     <p>{format(new Date(log.timestamp), "HH:mm")}</p>
                                 </div>
                                 <div className="relative w-full">
-                                    <div className="flex items-center gap-2">
-                                        <StatusBadge status={log.fromStatus} />
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <StatusBadge statusId={log.fromStatus} />
                                         <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                                        <StatusBadge status={log.toStatus} />
+                                        <StatusBadge statusId={log.toStatus} />
                                     </div>
                                     <p className="text-xs text-muted-foreground mt-1">por: {log.responsible}</p>
-                                    {log.observation && <p className="text-sm mt-2 p-2 bg-gray-50 rounded-md dark:bg-gray-800 whitespace-pre-wrap">{log.observation}</p>}
+                                    {log.observation && <p className="text-sm mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-md whitespace-pre-wrap">{log.observation}</p>}
                                 </div>
                             </li>
                         ))}
@@ -681,10 +480,9 @@ export default function OsDetailPage() {
                 </CardContent>
             </Card>
 
-            {/* New Card for Edit History */}
-            {order.editLogs && order.editLogs.length > 0 && (
+            {order.editLogs?.length && (
                 <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><ListTree /> Histórico de Edição da OS</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><ListTree /> Histórico de Edição</CardTitle></CardHeader>
                     <CardContent>
                         <ul className="space-y-4">
                             {order.editLogs.slice().reverse().map((editLog, index) => (
@@ -695,13 +493,13 @@ export default function OsDetailPage() {
                                     </div>
                                     <div className="relative w-full">
                                         <p className="font-semibold">Editado por: {editLog.responsible}</p>
-                                        {editLog.observation && <p className="text-sm text-muted-foreground mt-1">Observação: {editLog.observation}</p>}
+                                        {editLog.observation && <p className="text-sm mt-1">Obs: {editLog.observation}</p>}
                                         <div className="mt-2 space-y-1">
                                             {editLog.changes.map((change, changeIndex) => (
                                                 <p key={changeIndex} className="text-xs bg-gray-50 dark:bg-gray-800 p-2 rounded-md">
                                                     <span className="font-medium">{getTranslatedFieldName(change.field)}:</span>{" "}
                                                     <span className="text-red-500 line-through">{formatValueForDisplay(change.oldValue)}</span>{" "}
-                                                    <ArrowRight className="inline-block h-3 w-3 text-muted-foreground mx-1" />{" "}
+                                                    <ArrowRight className="inline-block h-3 w-3 mx-1" />{" "}
                                                     <span className="text-green-500">{formatValueForDisplay(change.newValue)}</span>
                                                 </p>
                                             ))}

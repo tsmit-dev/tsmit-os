@@ -15,7 +15,7 @@ import {
   SidebarCollapsibleContent,
   useSidebar
 } from './ui/sidebar';
-import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, ClipboardList, LineChart, Settings, Scan, Gem } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, ClipboardList, LineChart, Settings, Scan, Gem, ListChecks } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Badge } from './ui/badge';
@@ -126,6 +126,16 @@ export function SidebarNav() {
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )}
+                   {hasPermission('adminSettings') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings/status'} tooltip="Status da OS">
+                        <Link href="/admin/settings/status">
+                          <ListChecks />
+                          <span>Status</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
                   {hasPermission('adminSettings') && (
                     <SidebarMenuItem>
                       <SidebarMenuButton asChild isActive={pathname === '/admin/settings'} tooltip="Configurações de E-mail">
@@ -150,7 +160,7 @@ export function SidebarNav() {
               </SidebarCollapsibleContent>
             </SidebarCollapsible>
           )}
-        <SidebarSeparator />
+      
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout} tooltip="Sair">

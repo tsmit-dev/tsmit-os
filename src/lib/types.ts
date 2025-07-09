@@ -42,19 +42,21 @@ export type Client = {
   edr?: boolean;
 };
 
-export type ServiceOrderStatus =
-  | 'aberta'
-  | 'em_analise'
-  | 'aguardando_peca'
-  | 'aguardando_terceiros'
-  | 'pronta_entrega'
-  | 'entregue';
+export interface Status {
+  id: string;
+  name: string;
+  order: number;
+  isInitial?: boolean;
+  triggersEmail?: boolean;
+  allowedNextStatuses?: string[];
+}
+
 
 export type LogEntry = {
   timestamp: Date;
   responsible: string;
-  fromStatus: ServiceOrderStatus;
-  toStatus: ServiceOrderStatus;
+  fromStatus: string;
+  toStatus: string;
   observation?: string;
 };
 
@@ -94,7 +96,7 @@ export type ServiceOrder = {
   };
   reportedProblem: string;
   analyst: string;
-  status: ServiceOrderStatus;
+  status: string;
   technicalSolution?: string;
   createdAt: Date;
   logs: LogEntry[];

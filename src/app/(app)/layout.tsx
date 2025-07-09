@@ -4,21 +4,19 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 import AppLayoutContent from './_app-layout-content';
-import { usePermissions } from '@/context/PermissionsContext'; // Import usePermissions
+import { usePermissions } from '@/context/PermissionsContext';
+import { StatusesProvider } from '@/hooks/use-statuses'; // Import the new provider
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { userPermissions, loadingPermissions } = usePermissions(); // Use usePermissions
+  const { userPermissions, loadingPermissions } = usePermissions();
 
   useEffect(() => {
-    // If permissions are done loading AND userPermissions is null (meaning no authenticated user with a role),
-    // redirect to the login page.
     if (!loadingPermissions && userPermissions === null) {
       router.replace('/');
     }
   }, [userPermissions, loadingPermissions, router]);
 
-  // Show a loading skeleton while permissions are being fetched or if no user permissions are available
   if (loadingPermissions || userPermissions === null) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -35,8 +33,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
-        <AppLayoutContent>{children}</AppLayoutContent>
-    </SidebarProvider>
+    <StatusesProvider> {/* Wrap the content with StatusesProvider */}
+      <SidebarProvider>
+          <AppLayoutContent>{children}</AppLayoutContent>
+      </SidebarProvider>
+    </StatusesProvider>
   );
 }
