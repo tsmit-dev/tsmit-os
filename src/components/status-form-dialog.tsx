@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -32,7 +32,6 @@ import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
 import { getStatusColorStyle } from '../lib/status-colors';
 
-// Define the schema outside the component
 const statusFormSchema = z.object({
   name: z.string().min(3, { message: 'O nome deve ter pelo menos 3 caracteres.' }),
   order: z.coerce.number().int().positive({ message: 'A ordem deve ser um número positivo.' }),
@@ -40,7 +39,7 @@ const statusFormSchema = z.object({
   isInitial: z.boolean().default(false),
   triggersEmail: z.boolean().default(false),
   canGoBack: z.boolean().default(false),
-  isPickupStatus: z.boolean().default(false), // New field
+  isPickupStatus: z.boolean().default(false),
   allowedNextStatuses: z.array(z.string()).default([]),
 });
 
@@ -51,13 +50,13 @@ interface StatusFormDialogProps {
   onClose: () => void;
   status?: Status | null;
   allStatuses: Status[];
+  currentStatus?: Status | null;
 }
 
-export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: StatusFormDialogProps) {
+export function StatusFormDialog({ isOpen, onClose, status, allStatuses, currentStatus }: StatusFormDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
-  // Create a dynamic schema for validation
   const dynamicStatusSchema = statusFormSchema.refine(
     (data) => {
       const isOrderTaken = allStatuses.some(
@@ -99,7 +98,6 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
           allowedNextStatuses: status.allowedNextStatuses ?? [],
         });
       } else {
-        // Find the highest order number and add 1 for the new default
         const nextOrder = allStatuses.length > 0
             ? Math.max(...allStatuses.map(s => s.order)) + 1
             : 1;
@@ -116,6 +114,29 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
       }
     }
   }, [status, allStatuses, form, isOpen]);
+
+  const filteredStatuses = useMemo(() => {
+    if (!currentStatus) {
+      return allStatuses.filter(s => s.id !== status?.id);
+    }
+
+    let allowedStatuses = allStatuses;
+
+    if (currentStatus.allowedNextStatuses && currentStatus.allowedNextStatuses.length > 0) {
+      allowedStatuses = allStatuses.filter(s => currentStatus.allowedNextStatuses?.includes(s.id));
+    }
+
+    if (currentStatus.canGoBack) {
+      const previousStatusOrder = currentStatus.order - 1;
+      const previousStatus = allStatuses.find(s => s.order === previousStatusOrder);
+      if (previousStatus && !allowedStatuses.some(s => s.id === previousStatus.id)) {
+        allowedStatuses.push(previousStatus);
+      }
+    }
+
+    return allowedStatuses.filter(s => s.id !== status?.id);
+  }, [allStatuses, currentStatus, status]);
+
 
   const onSubmit = async (data: StatusFormValues) => {
     setLoading(true);
@@ -199,9 +220,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
                     </FormDescription>
                   </div>
                   <ScrollArea className="h-32 rounded-md border p-4">
-                    {allStatuses
-                      .filter(s => s.id !== status?.id)
-                      .map((item) => (
+                    {filteredStatuses.map((item) => (
                         <FormField
                           key={item.id}
                           control={form.control}

@@ -183,6 +183,7 @@ export default function StatusSettingsPage() {
         onClose={() => setIsDialogOpen(false)}
         status={selectedStatus}
         allStatuses={statuses}
+        currentStatus={selectedStatus}
       />
 
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

@@ -53,41 +53,43 @@ export default function OsDetailPage() {
 
     const availableStatuses = useMemo(() => {
         if (!order?.status) return [];
-
-        let allowedStatuses: Status[] = [];
-
-        // Admin can go to any status
+    
+        const current = order.status;
+        let allowed: Status[] = [];
+    
         if (hasPermission('adminSettings')) {
-            allowedStatuses = statuses.filter(s => s.id !== order.status.id);
+            // Admin can see all statuses except the current one
+            allowed = statuses.filter(s => s.id !== current.id);
         } else {
-            // Check for defined next statuses
-            const allowedList = order.status.allowedNextStatuses;
-            if (allowedList && allowedList.length > 0) {
-                allowedStatuses = statuses.filter(s => allowedList.includes(s.id));
+            // Regular user logic: only allow defined transitions
+            if (current.allowedNextStatuses && current.allowedNextStatuses.length > 0) {
+                allowed = statuses.filter(s => current.allowedNextStatuses?.includes(s.id));
             } else {
-                 // Default: allow any status except the current one if no rule is set
-                 allowedStatuses = statuses.filter(s => s.id !== order.status.id);
+                // If allowedNextStatuses is empty, no forward transitions are permitted
+                allowed = [];
+            }
+    
+            // Handle 'canGoBack' logic independently
+            if (current.canGoBack && order.logs.length > 0) {
+                const lastLogEntry = order.logs[0]; 
+                const previousStatusId = lastLogEntry.fromStatus;
+                
+                const previousStatus = statuses.find(s => s.id === previousStatusId);
+    
+                if (previousStatus && !allowed.some(s => s.id === previousStatusId)) {
+                    // Add the regression status, marking it for the UI
+                    allowed.unshift({ ...previousStatus, isBackButton: true } as any);
+                }
             }
         }
-        
-        // Add previous status if canGoBack is true
-        // Ensure there is at least one previous log entry (index 0 is the current transition's 'fromStatus')
-        if (order.status.canGoBack && order.logs.length > 0) {
-            // The most recent log entry (at index 0) contains the 'fromStatus' for the current state.
-            const lastLogEntry = order.logs[0]; 
-            const previousStatusId = lastLogEntry.fromStatus;
-            
-            // Find the full status object for the previous status
-            const previousStatus = statuses.find(s => s.id === previousStatusId);
-
-            // Add it to the list if it's not already there and it's a valid status
-            if (previousStatus && !allowedStatuses.some(s => s.id === previousStatusId)) {
-                allowedStatuses.unshift({ ...previousStatus, isBackButton: true } as Status);
-            }
-        }
-        
-        // Sort the statuses for consistent display
-        return allowedStatuses.sort((a, b) => a.order - b.order);
+    
+        // Sort for consistent display, keeping any 'go back' option at the top
+        return allowed.sort((a, b) => {
+            if ((a as any).isBackButton) return -1;
+            if ((b as any).isBackButton) return 1;
+            return a.order - b.order;
+        });
+    
     }, [order, statuses, hasPermission]);
 
 
