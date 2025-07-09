@@ -476,7 +476,7 @@ export const addServiceOrder = async (
     return (await getServiceOrderById(newOrderRef.id))!;
   };
 
-// MODIFIED: Simplified logic, validation is now on the frontend
+// CORRECTED: Handles empty observation to prevent Firestore error.
 export const updateServiceOrder = async (
     id: string, 
     newStatusId: string, 
@@ -497,24 +497,30 @@ export const updateServiceOrder = async (
         const currentOrderData = currentOrderSnap.data();
         const oldStatusId = currentOrderData.status;
 
-        const newLogEntry: LogEntry = {
+        // Dynamically build the log entry to avoid adding an 'undefined' observation
+        const newLogEntry: Omit<LogEntry, 'observation'> & { observation?: string } = {
             timestamp: new Date(),
             responsible,
             fromStatus: oldStatusId,
             toStatus: newStatusId,
-            observation: observation ?? undefined, 
         };
+        if (observation) {
+            newLogEntry.observation = observation;
+        }
 
         const updatePayload: any = {};
         let hasChanges = false;
+        
+        const isStatusChanging = newStatusId !== oldStatusId;
+        const isObservationPresent = !!observation;
 
-        if (newStatusId !== oldStatusId) {
-            updatePayload.status = newStatusId;
+        // A log should be created if the status changes OR if a new observation is added.
+        if (isStatusChanging || isObservationPresent) {
             updatePayload.logs = arrayUnion(newLogEntry);
+            if(isStatusChanging){
+                updatePayload.status = newStatusId;
+            }
             hasChanges = true;
-        } else if (observation) { // Also add log if only observation is added
-             updatePayload.logs = arrayUnion(newLogEntry);
-             hasChanges = true;
         }
         
         if (technicalSolution !== undefined && technicalSolution !== currentOrderData.technicalSolution) {
@@ -538,18 +544,17 @@ export const updateServiceOrder = async (
 
         const updatedOrder = await getServiceOrderById(id);
 
-        // Email sending logic is now triggered on the client-side based on the status flag,
-        // but the API call is still made. We just need to ensure the data is fresh.
+        // Email sending logic
         let emailSent = false;
         let emailErrorMessage: string | undefined;
 
-        if (updatedOrder) {
+        if (updatedOrder && isStatusChanging) { // Only send email on status change
             const newStatusObjQuery = await getDoc(doc(db, 'statuses', newStatusId));
             const triggersEmail = newStatusObjQuery.data()?.triggersEmail;
             
-            if (triggersEmail && newStatusId !== oldStatusId) {
+            if (triggersEmail) {
                  const client = await getClientById(updatedOrder.clientId);
-                 const recipientEmail = client?.email || updatedOrder.collaborator.email;
+                 const recipientEmail = updatedOrder.collaborator.email || client?.email;
 
                  if (recipientEmail) {
                     try {
@@ -568,7 +573,7 @@ export const updateServiceOrder = async (
                         emailErrorMessage = `Erro de rede ao tentar enviar e-mail: ${(error as Error).message}`;
                     }
                  } else {
-                    emailErrorMessage = 'Nenhum e-mail de destinatário válido.';
+                    emailErrorMessage = 'Nenhum e-mail de destinatário válido para notificação.';
                  }
             }
         }
