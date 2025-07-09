@@ -3,10 +3,9 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ServiceOrder, ProvidedService, Status } from "@/lib/types";
-import { getServiceOrderById, updateServiceOrder } from "@/lib/data";
+import { getServiceOrderById, updateServiceOrder, getStatuses } from "@/lib/data";
 import { useAuth } from "@/components/auth-provider";
 import { usePermissions } from "@/context/PermissionsContext";
-import { useStatuses } from "@/hooks/use-statuses";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,13 +32,13 @@ export default function OsDetailPage() {
     const { hasPermission, loadingPermissions } = usePermissions();
     const { toast } = useToast();
     const router = useRouter();
-    const { statuses, getStatusById, loading: loadingStatuses } = useStatuses();
-
+    
+    const [statuses, setStatuses] = useState<Status[]>([]);
     const [order, setOrder] = useState<ServiceOrder | null>(null);
     const [uploading, setUploading] = useState(0);
-    const [loadingOrder, setLoadingOrder] = useState(true);
+    const [loading, setLoading] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
-    const [currentStatusId, setCurrentStatusId] = useState<string | undefined>();
+    const [currentStatus, setCurrentStatus] = useState<Status | undefined>();
     const [technicalSolution, setTechnicalSolution] = useState('');
     const [confirmedServiceIds, setConfirmedServiceIds] = useState<string[]>([]);
     const [isEditOsDialogOpen, setIsEditOsDialogOpen] = useState(false);
@@ -48,27 +47,23 @@ export default function OsDetailPage() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const currentStatusObject = useMemo(() => {
-        return order ? getStatusById(order.status) : undefined;
-    }, [order, getStatusById]);
-    
     const isDelivered = useMemo(() => {
-        return currentStatusObject?.name.toLowerCase() === 'entregue';
-    }, [currentStatusObject]);
+        return order?.status?.name.toLowerCase() === 'entregue';
+    }, [order]);
 
     const availableStatuses = useMemo(() => {
-        if (!currentStatusObject) return [];
+        if (!order?.status) return [];
         if (hasPermission('adminSettings')) {
-            return statuses.filter(s => s.id !== currentStatusObject.id);
+            return statuses.filter(s => s.id !== order.status.id);
         }
 
-        const allowedList = currentStatusObject.allowedNextStatuses;
+        const allowedList = order.status.allowedNextStatuses;
         if (allowedList && allowedList.length > 0) {
             return statuses.filter(s => allowedList.includes(s.id));
         }
         
-        return statuses.filter(s => s.id !== currentStatusObject.id);
-    }, [currentStatusObject, statuses, hasPermission]);
+        return statuses.filter(s => s.id !== order.status.id);
+    }, [order, statuses, hasPermission]);
 
 
     const getTranslatedFieldName = (field: string): string => {
@@ -94,16 +89,21 @@ export default function OsDetailPage() {
         return String(value);
     };
     
-    const fetchServiceOrder = useCallback(async () => {
+    const fetchInitialData = useCallback(async () => {
         if (!id) return;
-        setLoadingOrder(true);
+        setLoading(true);
         try {
-            const data = await getServiceOrderById(id);
-            if (data) {
-                setOrder(data);
-                setCurrentStatusId(data.status);
-                setTechnicalSolution(data.technicalSolution || '');
-                setConfirmedServiceIds(data.confirmedServiceIds || []);
+            const [orderData, statusesData] = await Promise.all([
+                getServiceOrderById(id),
+                getStatuses()
+            ]);
+
+            if (orderData) {
+                setOrder(orderData);
+                setCurrentStatus(orderData.status);
+                setTechnicalSolution(orderData.technicalSolution || '');
+                setConfirmedServiceIds(orderData.confirmedServiceIds || []);
+                setStatuses(statusesData);
             } else {
                 toast({ title: "Erro", description: "Ordem de Serviço não encontrada.", variant: "destructive" });
                 router.push('/os');
@@ -112,37 +112,48 @@ export default function OsDetailPage() {
             console.error("Failed to fetch service order", error);
             toast({ title: "Erro", description: "Não foi possível carregar a OS.", variant: "destructive" });
         } finally {
-            setLoadingOrder(false);
+            setLoading(false);
         }
     }, [id, toast, router]);
 
+    const refreshOrder = useCallback(async () => {
+        if (!id) return;
+        try {
+            const data = await getServiceOrderById(id);
+             if (data) {
+                setOrder(data);
+             }
+        } catch (error) {
+             console.error("Failed to refresh service order", error);
+        }
+    },[id]);
+
     useEffect(() => {
         if (!loadingPermissions && hasPermission('os')) {
-            fetchServiceOrder();
+            fetchInitialData();
         } else if (!loadingPermissions && !hasPermission('os')) {
             toast({ title: "Acesso Negado", description: "Você não tem permissão para acessar Ordens de Serviço.", variant: "destructive" });
             router.replace('/dashboard');
         }
-    }, [loadingPermissions, hasPermission, router, fetchServiceOrder]);
+    }, [loadingPermissions, hasPermission, router, fetchInitialData]);
 
     const handleUpdate = async () => {
-        if (!order || !currentStatusId || !user) return;
+        if (!order || !currentStatus || !user) return;
         
         if (!hasPermission('os')) {
             toast({ title: "Acesso Negado", description: "Você não tem permissão para atualizar esta OS.", variant: "destructive" });
             return;
         }
     
-        const oldStatusId = order.status;
-        const newStatusId = currentStatusId;
-        const newStatusObject = getStatusById(newStatusId);
-    
+        const oldStatusId = order.status.id;
+        const newStatusId = currentStatus.id;
         const isStatusChanging = newStatusId !== oldStatusId;
+    
         if (isStatusChanging && !hasPermission('adminSettings')) {
             const isValidTransition = availableStatuses.some(s => s.id === newStatusId);
             if (!isValidTransition) {
                 toast({ title: "Transição de Status Inválida", description: `Não é possível mover a OS para este status.`, variant: "destructive" });
-                setCurrentStatusId(oldStatusId);
+                setCurrentStatus(order.status);
                 return;
             }
         }
@@ -151,7 +162,7 @@ export default function OsDetailPage() {
             confirmedServiceIds.includes(service.id)
         ) ?? true;
             
-        if (newStatusObject?.triggersEmail && !allContractedServicesConfirmed) {
+        if (currentStatus?.triggersEmail && !allContractedServicesConfirmed) {
             toast({ title: "Serviços Pendentes", description: "Confirme todos os serviços contratados antes de avançar para um status que notifica o cliente.", variant: "destructive" });
             return;
         }
@@ -171,6 +182,7 @@ export default function OsDetailPage() {
             
             if (result.updatedOrder) {
                 setOrder(result.updatedOrder);
+                setCurrentStatus(result.updatedOrder.status);
                 toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
     
                 if (isStatusChanging) {
@@ -215,7 +227,7 @@ export default function OsDetailPage() {
                     const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                     const updatedAttachments = [...(order.attachments || []), downloadURL];
                     const result = await updateServiceOrder(
-                        order.id, order.status, user.name, order.technicalSolution || '',
+                        order.id, order.status.id, user.name, order.technicalSolution || '',
                         `Anexo adicionado: ${selectedFile.name}`, updatedAttachments, confirmedServiceIds
                     );
                     if (result.updatedOrder) {
@@ -244,7 +256,7 @@ export default function OsDetailPage() {
             await deleteObject(ref(storage, urlToDelete));
             const updatedAttachments = (order.attachments || []).filter(url => url !== urlToDelete);
             const result = await updateServiceOrder(
-                order.id, order.status, user.name, order.technicalSolution || '',
+                order.id, order.status.id, user.name, order.technicalSolution || '',
                 `Anexo removido: ${getFileNameFromUrl(urlToDelete)}`, updatedAttachments, confirmedServiceIds
             );
             if (result.updatedOrder) {
@@ -270,11 +282,10 @@ export default function OsDetailPage() {
         }
     };
     
-    if (loadingPermissions || loadingStatuses || loadingOrder) return <OsDetailSkeleton />;
+    if (loadingPermissions || loading) return <OsDetailSkeleton />;
     if (!order || !hasPermission('os')) return <p>Acesso negado ou OS não encontrada.</p>;
 
-    const canChangeStatus = hasPermission('os');
-    const showServiceConfirmation = currentStatusObject?.triggersEmail;
+    const showServiceConfirmation = currentStatus?.triggersEmail;
     const hasIncompleteServices = order.contractedServices?.some(service => !confirmedServiceIds.includes(service.id));
     const showAlertBanner = showServiceConfirmation && hasIncompleteServices;
 
@@ -307,19 +318,17 @@ export default function OsDetailPage() {
                 <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><Wrench /> Atualização da OS</CardTitle><CardDescription>Altere o status ou adicione uma nota/solução técnica.</CardDescription></CardHeader>
                     <CardContent className="space-y-4">
-                        {canChangeStatus && (
-                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Alterar Status para:</label>
-                                <Select value={currentStatusId} onValueChange={(v: string) => setCurrentStatusId(v)} disabled={isUpdating || isDelivered}>
-                                    <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Selecione o próximo status" /></SelectTrigger>
-                                    <SelectContent>
-                                        {currentStatusObject && <SelectItem value={currentStatusObject.id} disabled>-- {currentStatusObject.name} (Atual) --</SelectItem>}
-                                        {availableStatuses.map(status => (<SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>))}
-                                    </SelectContent>
-                                </Select>
-                                 {availableStatuses.length === 0 && !isDelivered && <p className="text-xs text-muted-foreground mt-1">Não há próximos status permitidos. Configure em Admin &gt; Status.</p>}
-                            </div>
-                        )}
+                        <div className="space-y-2">
+                           <label className="text-sm font-medium">Alterar Status para:</label>
+                           <Select value={currentStatus?.id} onValueChange={(v: string) => setCurrentStatus(statuses.find(s => s.id === v))} disabled={isUpdating || isDelivered}>
+                               <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="Selecione o próximo status" /></SelectTrigger>
+                               <SelectContent>
+                                   {order.status && <SelectItem value={order.status.id} disabled>-- {order.status.name} (Atual) --</SelectItem>}
+                                   {availableStatuses.map(status => (<SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>))}
+                               </SelectContent>
+                           </Select>
+                            {availableStatuses.length === 0 && !isDelivered && <p className="text-xs text-muted-foreground mt-1">Não há próximos status permitidos. Configure em Admin &gt; Status.</p>}
+                       </div>
                         
                         {showServiceConfirmation && (
                             <div className="space-y-2 border p-4 rounded-md bg-yellow-50/20 dark:bg-yellow-950/20">
@@ -339,9 +348,9 @@ export default function OsDetailPage() {
                 </Card>
             )}
 
-            <Card><CardHeader><CardTitle className="flex items-center gap-2"><History /> Histórico de Status</CardTitle></CardHeader><CardContent><ul className="space-y-4">{order.logs.slice().reverse().map((log, index) => (<li key={index} className="flex items-start gap-4 text-sm"><div className="text-muted-foreground text-right w-32 shrink-0"><p>{format(new Date(log.timestamp), "dd/MM/yy")}</p><p>{format(new Date(log.timestamp), "HH:mm")}</p></div><div className="relative w-full"><div className="flex items-center gap-2 flex-wrap"><StatusBadge statusId={log.fromStatus} /><ArrowRight className="h-4 w-4 text-muted-foreground" /><StatusBadge statusId={log.toStatus} /></div><p className="text-xs text-muted-foreground mt-1">por: {log.responsible}</p>{log.observation && <p className="text-sm mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-md whitespace-pre-wrap">{log.observation}</p>}</div></li>))}</ul></CardContent></Card>
+            <Card><CardHeader><CardTitle className="flex items-center gap-2"><History /> Histórico de Status</CardTitle></CardHeader><CardContent><ul className="space-y-4">{order.logs.slice().reverse().map((log, index) => (<li key={index} className="flex items-start gap-4 text-sm"><div className="text-muted-foreground text-right w-32 shrink-0"><p>{format(new Date(log.timestamp), "dd/MM/yy")}</p><p>{format(new Date(log.timestamp), "HH:mm")}</p></div><div className="relative w-full"><div className="flex items-center gap-2 flex-wrap"><StatusBadge status={statuses.find(s => s.id === log.fromStatus)!} /><ArrowRight className="h-4 w-4 text-muted-foreground" /><StatusBadge status={statuses.find(s => s.id === log.toStatus)!} /></div><p className="text-xs text-muted-foreground mt-1">por: {log.responsible}</p>{log.observation && <p className="text-sm mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-md whitespace-pre-wrap">{log.observation}</p>}</div></li>))}</ul></CardContent></Card>
             {order.editLogs?.length && (<Card><CardHeader><CardTitle className="flex items-center gap-2"><ListTree /> Histórico de Edição</CardTitle></CardHeader><CardContent><ul className="space-y-4">{order.editLogs.slice().reverse().map((log, index) => (<li key={index} className="flex items-start gap-4 text-sm"><div className="text-muted-foreground text-right w-32 shrink-0"><p>{format(new Date(log.timestamp), "dd/MM/yy")}</p><p>{format(new Date(log.timestamp), "HH:mm")}</p></div><div className="relative w-full"><p className="font-semibold">Editado por: {log.responsible}</p>{log.observation && <p className="text-sm mt-1">Obs: {log.observation}</p>}<div className="mt-2 space-y-1">{log.changes.map((change, i) => (<p key={i} className="text-xs bg-gray-50 dark:bg-gray-800 p-2 rounded-md"><span className="font-medium">{getTranslatedFieldName(change.field)}:</span> <span className="text-red-500 line-through">{formatValueForDisplay(change.oldValue)}</span> <ArrowRight className="inline-block h-3 w-3 mx-1" /> <span className="text-green-500">{formatValueForDisplay(change.newValue)}</span></p>))}</div></div></li>))}</ul></CardContent></Card>)}
-            {order && (<EditOsDialog isOpen={isEditOsDialogOpen} onClose={() => setIsEditOsDialogOpen(false)} serviceOrder={order} onSaveSuccess={fetchServiceOrder} />)}
+            {order && (<EditOsDialog isOpen={isEditOsDialogOpen} onClose={() => setIsEditOsDialogOpen(false)} serviceOrder={order} onSaveSuccess={refreshOrder} />)}
         </div>
     );
 }

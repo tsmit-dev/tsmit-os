@@ -8,7 +8,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
 import { PackageCheck } from 'lucide-react';
 import { usePermissions } from '@/context/PermissionsContext';
-import { useStatuses } from '@/hooks/use-statuses'; // 1. Import useStatuses
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 
@@ -16,13 +15,12 @@ export default function ReadyForPickupPage() {
     const [orders, setOrders] = useState<ServiceOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const { hasPermission, loadingPermissions } = usePermissions();
-    const { statuses, loading: loadingStatuses } = useStatuses(); // 2. Use the hook
     const router = useRouter();
     const { toast } = useToast();
     const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
-        if (!loadingPermissions && !loadingStatuses) {
+        if (!loadingPermissions) {
             if (!hasPermission('os')) {
                 toast({
                     title: "Acesso Negado",
@@ -34,26 +32,16 @@ export default function ReadyForPickupPage() {
             }
             fetchOrders();
         }
-    }, [loadingPermissions, loadingStatuses, hasPermission, router, toast, statuses]);
+    }, [loadingPermissions, hasPermission, router, toast]);
 
     const fetchOrders = async () => {
         setLoading(true);
         try {
-            // 3. Find the status ID for "Pronta para Entrega"
-            const readyStatus = statuses.find(
-                s => s.name.trim().toLowerCase() === 'pronta para entrega'
-            );
-
-            if (!readyStatus) {
-                console.warn("Status 'Pronta para Entrega' não encontrado nas configurações.");
-                setOrders([]); // Set to empty if status doesn't exist
-                setLoading(false);
-                return;
-            }
-
             const data = await getServiceOrders();
-            // 4. Filter by the found status ID
-            const filteredData = data.filter(order => order.status === readyStatus.id);
+            // Filter by the status name directly
+            const filteredData = data.filter(
+                order => order.status.name.trim().toLowerCase() === 'pronta para entrega'
+            );
             setOrders(filteredData);
         } catch (error) {
             console.error("Failed to fetch service orders", error);
@@ -63,10 +51,7 @@ export default function ReadyForPickupPage() {
         }
     };
 
-    // The search filter now also uses the useStatuses hook to search by status name
-    const { getStatusById } = useStatuses();
     const filteredOrders = orders.filter(order => {
-        const statusName = getStatusById(order.status)?.name || '';
         return (
             order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (order.clientName && order.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -75,11 +60,11 @@ export default function ReadyForPickupPage() {
             order.equipment.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
             order.equipment.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
             order.analyst.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            statusName.toLowerCase().includes(searchTerm.toLowerCase())
+            order.status.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     });
 
-    if (loadingPermissions || loadingStatuses || loading) {
+    if (loadingPermissions || loading) {
         return (
             <div className="space-y-4 p-4 sm:p-6 lg:p-8">
                 <Skeleton className="h-10 w-1/3" />

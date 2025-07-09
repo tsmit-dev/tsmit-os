@@ -1,37 +1,33 @@
 'use client';
 
 import { Badge } from "@/components/ui/badge";
-import { useStatuses } from "@/hooks/use-statuses";
 import React from "react";
 import { cn } from "@/lib/utils";
 import { getStatusColorClasses } from "@/lib/status-colors";
+import { Status } from "@/lib/types";
 import { Skeleton } from "./ui/skeleton";
 
 export interface StatusBadgeProps {
-  statusId: string;
+  status: Status;
+  isLoading?: boolean;
 }
 
-export const StatusBadge: React.FC<StatusBadgeProps> = ({ statusId }) => {
-    const { getStatusById, loading } = useStatuses();
+export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, isLoading }) => {
     
-    if (loading) {
-        // Render a skeleton that looks like a badge
+    if (isLoading) {
         return <Skeleton className="h-6 w-24 rounded-full" />;
     }
     
-    const status = getStatusById(statusId);
-    
     if (!status) {
-        // Render a badge with a specific style for unknown status
         return <Badge variant="destructive">Desconhecido</Badge>;
     }
     
-    const label = status.name;
-    const colorClasses = getStatusColorClasses(status.color);
+    const { name, color } = status;
+    const colorClasses = getStatusColorClasses(color);
 
     return (
         <Badge className={cn("font-medium capitalize", colorClasses)}>
-            {label}
+            {name}
         </Badge>
     );
 };

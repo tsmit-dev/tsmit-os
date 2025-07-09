@@ -97,7 +97,7 @@ export type ServiceOrder = {
   };
   reportedProblem: string;
   analyst: string;
-  status: string;
+  status: Status;
   technicalSolution?: string;
   createdAt: Date;
   logs: LogEntry[];

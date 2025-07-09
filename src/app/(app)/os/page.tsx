@@ -54,7 +54,7 @@ export default function AllOsPage() {
         order.equipment.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.equipment.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.analyst.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.status.toLowerCase().includes(searchTerm.toLowerCase())
+        order.status.name.toLowerCase().includes(searchTerm.toLowerCase())
     ); // Filter orders based on search term
 
     if (loadingPermissions || !hasPermission('os') || loading) {

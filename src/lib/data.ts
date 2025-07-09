@@ -20,7 +20,7 @@
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  */
 "use client"
-import { ServiceOrder, User, Client, LogEntry, Role, UpdateServiceOrderResult, ProvidedService, EditLogEntry, EditLogChange } from "./types";
+import { ServiceOrder, User, Client, LogEntry, Role, UpdateServiceOrderResult, ProvidedService, EditLogEntry, EditLogChange, Status } from "./types";
 import { db, auth } from "./firebase"; 
 import { collection, getDocs, getDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit, runTransaction, arrayUnion, setDoc, addDoc, writeBatch } from "firebase/firestore"; 
 import { createUserWithEmailAndPassword, deleteUser as deleteAuthUser } from "firebase/auth";
@@ -264,36 +264,51 @@ export const assignServiceToClients = async (serviceId: string, clientIds: strin
     await batch.commit();
 };
 
+// --- STATUSES ---
+export const getStatuses = async (): Promise<Status[]> => {
+    const statusesCollection = collection(db, "statuses");
+    const q = query(statusesCollection, orderBy("order", "asc"));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Status[];
+};
+
+
 // --- SERVICE ORDERS ---
 
 export const getServiceOrders = async (): Promise<ServiceOrder[]> => {
-    const clients = await getClients();
+    const [clients, statuses, serviceOrdersSnapshot] = await Promise.all([
+        getClients(),
+        getStatuses(),
+        getDocs(query(collection(db, "serviceOrders"), orderBy("createdAt", "desc")))
+    ]);
+
     const clientMap = new Map<string, Client>(clients.map(c => [c.id, c]));
+    const statusMap = new Map<string, Status>(statuses.map(s => [s.id, s]));
 
-    const serviceOrdersCollection = collection(db, "serviceOrders");
-    const q = query(serviceOrdersCollection, orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
+    const defaultStatus: Status = { id: 'unknown', name: 'Desconhecido', color: '#808080', order: 999 };
 
-    return querySnapshot.docs.map(doc => {
-        const order = { ...doc.data(), id: doc.id } as ServiceOrder;
-        const client = clientMap.get(order.clientId);
+    return serviceOrdersSnapshot.docs.map(doc => {
+        const orderData = { ...doc.data(), id: doc.id } as any; // Raw data from firestore
+        const client = clientMap.get(orderData.clientId);
+        const status = statusMap.get(orderData.status) || defaultStatus;
 
         return {
-            ...order,
+            ...orderData,
             clientName: client ? client.name : 'Cliente não encontrado',
-            createdAt: order.createdAt instanceof Date ? order.createdAt : (order.createdAt as any).toDate(),
-            logs: order.logs.map(log => ({
+            status: status,
+            createdAt: orderData.createdAt?.toDate(),
+            logs: orderData.logs?.map((log: any) => ({
                 ...log,
-                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            })),
-            attachments: order.attachments || [],
-            contractedServices: order.contractedServices || [],
-            confirmedServiceIds: order.confirmedServiceIds || [],
-            editLogs: order.editLogs?.map(log => ({
+                timestamp: log.timestamp?.toDate(),
+            })) || [],
+            attachments: orderData.attachments || [],
+            contractedServices: orderData.contractedServices || [],
+            confirmedServiceIds: orderData.confirmedServiceIds || [],
+            editLogs: orderData.editLogs?.map((log: any) => ({
                 ...log,
-                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+                timestamp: log.timestamp?.toDate(),
             })) || []
-        };
+        } as ServiceOrder;
     });
 };
 
@@ -302,24 +317,31 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
     const serviceOrderSnap = await getDoc(serviceOrderDocRef);
 
     if (serviceOrderSnap.exists()) {
-        const orderData = serviceOrderSnap.data() as ServiceOrder;
-        const client = await getClientById(orderData.clientId);
+        const orderData = serviceOrderSnap.data() as any; // Raw data
+        const [client, statuses] = await Promise.all([
+            getClientById(orderData.clientId),
+            getStatuses()
+        ]);
+        
+        const statusMap = new Map<string, Status>(statuses.map(s => [s.id, s]));
+        const status = statusMap.get(orderData.status) || { id: 'unknown', name: 'Desconhecido', color: '#808080', order: 999 };
         
         return {
             ...orderData, 
             id: serviceOrderSnap.id,
             clientName: client ? client.name : 'Cliente não encontrado',
-            createdAt: orderData.createdAt instanceof Date ? orderData.createdAt : (orderData.createdAt as any).toDate(),
-            logs: orderData.logs.map(log => ({
+            status: status,
+            createdAt: orderData.createdAt?.toDate(),
+            logs: orderData.logs?.map((log: any) => ({
                 ...log,
-                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
-            })),
+                timestamp: log.timestamp?.toDate(),
+            })) || [],
             attachments: orderData.attachments || [],
             contractedServices: orderData.contractedServices || [],
             confirmedServiceIds: orderData.confirmedServiceIds || [],
-            editLogs: orderData.editLogs?.map(log => ({
+            editLogs: orderData.editLogs?.map((log: any) => ({
                 ...log,
-                timestamp: log.timestamp instanceof Date ? log.timestamp : (log.timestamp as any).toDate(),
+                timestamp: log.timestamp?.toDate(),
             })) || []
         } as ServiceOrder;
     }
@@ -349,11 +371,7 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
         throw new Error("Service Order not found.");
     }
 
-    const oldOrderData = currentOrderSnap.data() as ServiceOrder;
-
-    // This check is now more robust as it does not depend on a hardcoded string
-    // A future improvement could be a status flag like `isFinal`
-    // For now, this logic is handled on the frontend before calling this function.
+    const oldOrderData = (await getServiceOrderById(id))!; // get enriched data
 
     const changes: EditLogChange[] = [];
 
@@ -427,21 +445,21 @@ export const addServiceOrder = async (
         contractedServicesAtCreation = servicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProvidedService));
     }
 
-    const newOrder = await runTransaction(db, async (tx) => {
-      const newOrderData: Omit<ServiceOrder, 'id'> = {
+    const newOrderRef = doc(serviceOrdersCollection);
+    const newOrderData = {
         clientId: data.clientId,
         collaborator: data.collaborator,
         equipment: data.equipment,
         reportedProblem: data.reportedProblem,
         analyst: data.analyst,
         orderNumber: formattedOrderNumber,
-        status: data.statusId, // Use the provided statusId
+        status: data.statusId, // Store status ID
         createdAt: new Date(),
         logs: [
           {
             timestamp: new Date(),
             responsible: data.analyst,
-            fromStatus: data.statusId, // Log with the initial statusId
+            fromStatus: data.statusId,
             toStatus: data.statusId,
             observation: 'OS criada no sistema.',
           }
@@ -451,14 +469,11 @@ export const addServiceOrder = async (
         confirmedServiceIds: [],
         editLogs: []
       };
+
+    await setDoc(newOrderRef, newOrderData);
   
-      const newServiceOrderRef = doc(serviceOrdersCollection);
-      tx.set(newServiceOrderRef, newOrderData);
-  
-      return { ...newOrderData, id: newServiceOrderRef.id };
-    });
-  
-    return newOrder;
+    // Return the newly created and enriched service order
+    return (await getServiceOrderById(newOrderRef.id))!;
   };
 
 // MODIFIED: Simplified logic, validation is now on the frontend
@@ -479,7 +494,7 @@ export const updateServiceOrder = async (
             return { updatedOrder: null, emailSent: false, emailErrorMessage: "Ordem de serviço não encontrada." };
         }
 
-        const currentOrderData = currentOrderSnap.data() as ServiceOrder;
+        const currentOrderData = currentOrderSnap.data();
         const oldStatusId = currentOrderData.status;
 
         const newLogEntry: LogEntry = {
