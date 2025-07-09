@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import React from "react";
 import { cn } from "@/lib/utils";
-import { getStatusColorClasses } from "@/lib/status-colors";
+import { getStatusColorStyle } from "@/lib/status-colors";
 import { Status } from "@/lib/types";
 import { Skeleton } from "./ui/skeleton";
 
@@ -23,10 +23,10 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, isLoading }) =
     }
     
     const { name, color } = status;
-    const colorClasses = getStatusColorClasses(color);
+    const style = getStatusColorStyle(color);
 
     return (
-        <Badge className={cn("font-medium capitalize", colorClasses)}>
+        <Badge variant="custom" style={style} className={cn("font-medium capitalize")}>
             {name}
         </Badge>
     );

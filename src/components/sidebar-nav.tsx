@@ -91,12 +91,11 @@ export function SidebarNav() {
         </div>
         <SidebarSeparator />
 		
-		{isQrScannerOpen && (
-		  <QrScanner
+		<QrScanner
+			isOpen={isQrScannerOpen}
 			onClose={() => setIsQrScannerOpen(false)}
 			onScanSuccess={handleScanSuccess}
-		  />
-		)}
+		/>
 
         {canAccessAdminSettings && (
             <SidebarCollapsible defaultOpen={pathname.startsWith('/admin')}>

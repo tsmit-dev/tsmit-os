@@ -29,17 +29,15 @@ import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
-import { STATUS_COLORS, getStatusColorClasses } from '../lib/status-colors'; // Corrected import path
+import { getStatusColorStyle } from '../lib/status-colors';
 
-
-// Update schema to include color
+// Update schema to accept a hex color string
 const statusFormSchema = z.object({
   name: z.string().min(3, { message: 'O nome deve ter pelo menos 3 caracteres.' }),
   order: z.coerce.number().int().positive({ message: 'A ordem deve ser um número positivo.' }),
-  color: z.string().min(1, { message: 'Por favor, selecione uma cor.' }),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, { message: 'Por favor, insira uma cor hexadecimal válida (ex: #RRGGBB).' }),
   isInitial: z.boolean().default(false),
   triggersEmail: z.boolean().default(false),
   allowedNextStatuses: z.array(z.string()).default([]),
@@ -63,7 +61,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
     defaultValues: {
       name: '',
       order: 1,
-      color: 'gray',
+      color: '#808080', // Default to gray
       isInitial: false,
       triggersEmail: false,
       allowedNextStatuses: [],
@@ -76,7 +74,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
         form.reset({
           name: status.name,
           order: status.order,
-          color: status.color || 'gray',
+          color: status.color || '#808080',
           isInitial: status.isInitial ?? false,
           triggersEmail: status.triggersEmail ?? false,
           allowedNextStatuses: status.allowedNextStatuses ?? [],
@@ -85,7 +83,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
         form.reset({
           name: '',
           order: 1,
-          color: 'gray',
+          color: '#808080',
           isInitial: false,
           triggersEmail: false,
           allowedNextStatuses: [],
@@ -151,23 +149,12 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cor da Etiqueta</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma cor" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.entries(STATUS_COLORS).map(([colorKey, colorData]) => (
-                          <SelectItem key={colorKey} value={colorKey}>
-                            <div className="flex items-center gap-2">
-                              <div className={cn("w-3 h-3 rounded-full", getStatusColorClasses(colorKey))} />
-                              <span>{colorData.label}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                        <div className="flex items-center gap-2">
+                            <Input type="color" {...field} className="p-1 h-10 w-14" />
+                            <Input type="text" {...field} placeholder="#RRGGBB" className="flex-1" />
+                        </div>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -207,7 +194,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
                                 />
                               </FormControl>
                               <FormLabel className="font-normal flex items-center gap-2">
-                                <Badge className={cn(getStatusColorClasses(item.color || 'gray'))}>{item.name}</Badge>
+                                <Badge variant="custom" style={getStatusColorStyle(item.color)}>{item.name}</Badge>
                               </FormLabel>
                             </FormItem>
                           )}
