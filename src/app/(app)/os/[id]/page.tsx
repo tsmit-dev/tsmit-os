@@ -51,6 +51,11 @@ export default function OsDetailPage() {
         return order?.status?.name.toLowerCase() === 'entregue';
     }, [order]);
 
+    // Derived state for dynamic UI based on the selected status
+    const isPickupStatusSelected = useMemo(() => currentStatus?.isPickupStatus ?? false, [currentStatus]);
+    const noteLabel = useMemo(() => isPickupStatusSelected ? "Solução Técnica" : "Nota", [isPickupStatusSelected]);
+    const notePlaceholder = useMemo(() => isPickupStatusSelected ? "Descreva a solução técnica detalhadamente." : "Adicione uma nota (opcional).", [isPickupStatusSelected]);
+
     const availableStatuses = useMemo(() => {
         if (!order?.status) return [];
     
@@ -173,6 +178,16 @@ export default function OsDetailPage() {
             toast({ title: "Acesso Negado", description: "Você não tem permissão para atualizar esta OS.", variant: "destructive" });
             return;
         }
+
+        // --- NEW: Validation for required technical solution ---
+        if (isPickupStatusSelected && !technicalSolution.trim()) {
+            toast({
+                title: "Campo Obrigatório",
+                description: "A Solução Técnica é obrigatória para o status de retirada.",
+                variant: "destructive",
+            });
+            return;
+        }
     
         const oldStatusId = order.status.id;
         const newStatusId = currentStatus.id;
@@ -200,13 +215,20 @@ export default function OsDetailPage() {
             toast({ title: "Nenhuma alteração", description: "Nenhuma alteração para salvar." });
             return;
         }
+
+        // --- FIX: Ensure observation is null, not undefined, when empty ---
+        const observationText = technicalSolution.trim() ? `${noteLabel}: ${technicalSolution.trim()}` : undefined;
         
         setIsUpdating(true);
         try {
             const result = await updateServiceOrder(
-                order.id, newStatusId, user.name, technicalSolution,
-                technicalSolution.trim() ? `Nota/Solução: ${technicalSolution}` : undefined,
-                order.attachments, confirmedServiceIds
+                order.id, 
+                newStatusId, 
+                user.name, 
+                technicalSolution, 
+                observationText, 
+                order.attachments, 
+                confirmedServiceIds
             );
             
             if (result.updatedOrder) {
@@ -376,7 +398,19 @@ export default function OsDetailPage() {
                             </div>                        
                         )}
 
-                        <div className="space-y-2"><label className="text-sm font-medium">Solução Técnica / Nota</label><Textarea value={technicalSolution} onChange={(e) => setTechnicalSolution(e.target.value)} rows={6} placeholder="Descreva a solução ou adicione uma nota." disabled={isUpdating || isDelivered} /></div>
+                        <div className="space-y-2">
+                            <Label htmlFor="technical-solution" className="text-sm font-medium">
+                                {noteLabel} {isPickupStatusSelected && <span className="text-red-500">*</span>}
+                            </Label>
+                            <Textarea 
+                                id="technical-solution"
+                                value={technicalSolution} 
+                                onChange={(e) => setTechnicalSolution(e.target.value)} 
+                                rows={6} 
+                                placeholder={notePlaceholder} 
+                                disabled={isUpdating || isDelivered} 
+                            />
+                        </div>
                         <Button onClick={handleUpdate} disabled={isUpdating || isDelivered || (showAlertBanner ?? false)}>{isUpdating ? 'Salvando...' : 'Salvar Alterações'}</Button>
                     </CardContent>
                 </Card>
