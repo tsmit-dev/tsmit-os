@@ -113,6 +113,7 @@ export default function StatusSettingsPage() {
                 <TableHead className="w-[80px]">Ordem</TableHead>
                 <TableHead>Nome do Status</TableHead>
                 <TableHead className="w-[80px]">Cor</TableHead>
+                <TableHead>P/ Retirada?</TableHead>
                 <TableHead>Status Inicial?</TableHead>
                 <TableHead>Dispara Email?</TableHead>
                 <TableHead>Pode Voltar?</TableHead>
@@ -122,7 +123,7 @@ export default function StatusSettingsPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={8} className="text-center">
                     Carregando...
                   </TableCell>
                 </TableRow>
@@ -139,6 +140,7 @@ export default function StatusSettingsPage() {
                         />
                       </div>
                     </TableCell>
+                    <TableCell>{status.isPickupStatus ? 'Sim' : 'Não'}</TableCell>
                     <TableCell>{status.isInitial ? 'Sim' : 'Não'}</TableCell>
                     <TableCell>{status.triggersEmail ? 'Sim' : 'Não'}</TableCell>
                     <TableCell>{status.canGoBack ? 'Sim' : 'Não'}</TableCell>
@@ -166,7 +168,7 @@ export default function StatusSettingsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={8} className="text-center">
                     Nenhum status encontrado. Adicione um para começar.
                   </TableCell>
                 </TableRow>

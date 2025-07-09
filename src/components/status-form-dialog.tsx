@@ -39,7 +39,8 @@ const statusFormSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, { message: 'Por favor, insira uma cor hexadecimal válida (ex: #RRGGBB).' }),
   isInitial: z.boolean().default(false),
   triggersEmail: z.boolean().default(false),
-  canGoBack: z.boolean().default(false), // New field
+  canGoBack: z.boolean().default(false),
+  isPickupStatus: z.boolean().default(false), // New field
   allowedNextStatuses: z.array(z.string()).default([]),
 });
 
@@ -79,6 +80,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
       isInitial: false,
       triggersEmail: false,
       canGoBack: false,
+      isPickupStatus: false,
       allowedNextStatuses: [],
     },
   });
@@ -93,6 +95,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
           isInitial: status.isInitial ?? false,
           triggersEmail: status.triggersEmail ?? false,
           canGoBack: status.canGoBack ?? false,
+          isPickupStatus: status.isPickupStatus ?? false,
           allowedNextStatuses: status.allowedNextStatuses ?? [],
         });
       } else {
@@ -107,6 +110,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
           isInitial: false,
           triggersEmail: false,
           canGoBack: false,
+          isPickupStatus: false,
           allowedNextStatuses: [],
         });
       }
@@ -254,6 +258,16 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses }: Statu
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                      <div className="space-y-0.5"><FormLabel>Permite Retroceder</FormLabel><FormDescription>Permite voltar para o status anterior.</FormDescription></div>
+                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="isPickupStatus"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                     <div className="space-y-0.5"><FormLabel>Status de Retirada</FormLabel><FormDescription>Marca a OS como pronta para entrega.</FormDescription></div>
                     <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
                 )}

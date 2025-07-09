@@ -51,6 +51,7 @@ export interface Status {
   triggersEmail?: boolean;
   allowedNextStatuses?: string[];
   canGoBack?: boolean; 
+  isPickupStatus?: boolean;
 }
 
 

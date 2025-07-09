@@ -38,9 +38,9 @@ export default function ReadyForPickupPage() {
         setLoading(true);
         try {
             const data = await getServiceOrders();
-            // Filter by the status name directly
+            // Filter by the isPickupStatus flag
             const filteredData = data.filter(
-                order => order.status.name.trim().toLowerCase() === 'pronta para entrega'
+                order => order.status.isPickupStatus === true
             );
             setOrders(filteredData);
         } catch (error) {
