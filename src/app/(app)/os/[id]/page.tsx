@@ -71,22 +71,23 @@ export default function OsDetailPage() {
         }
         
         // Add previous status if canGoBack is true
-        if (order.status.canGoBack && order.logs.length > 1) {
-            // Find the ID of the status before the most recent one
-            const previousLog = order.logs[order.logs.length - 1]; 
-            const previousStatusId = previousLog.fromStatus;
+        // Ensure there is at least one previous log entry (index 0 is the current transition's 'fromStatus')
+        if (order.status.canGoBack && order.logs.length > 0) {
+            // The most recent log entry (at index 0) contains the 'fromStatus' for the current state.
+            const lastLogEntry = order.logs[0]; 
+            const previousStatusId = lastLogEntry.fromStatus;
             
-            // Find the full status object
+            // Find the full status object for the previous status
             const previousStatus = statuses.find(s => s.id === previousStatusId);
 
-            // Add it to the list if it's not already there
+            // Add it to the list if it's not already there and it's a valid status
             if (previousStatus && !allowedStatuses.some(s => s.id === previousStatusId)) {
-                // To make it visually distinct, we can add a special property or handle it in the render
-                allowedStatuses.unshift({ ...previousStatus, isBackButton: true } as any);
+                allowedStatuses.unshift({ ...previousStatus, isBackButton: true } as Status);
             }
         }
         
-        return allowedStatuses;
+        // Sort the statuses for consistent display
+        return allowedStatuses.sort((a, b) => a.order - b.order);
     }, [order, statuses, hasPermission]);
 
 
