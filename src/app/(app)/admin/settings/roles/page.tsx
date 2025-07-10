@@ -1,28 +1,35 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Role, Permissions } from "@/lib/types";
 import { getRoles, addRole, updateRole, deleteRole } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
-import { Edit, Trash2, PlusCircle } from "lucide-react";
+import { usePermissions } from "@/context/PermissionsContext";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { usePermissions } from "@/context/PermissionsContext";
-import { useRouter } from "next/navigation";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PlusCircle, Edit, Trash2 } from "lucide-react";
 
 interface RoleFormProps {
   role?: Role;
@@ -42,14 +49,16 @@ const defaultPermissions: Permissions = {
 
 const RoleForm: React.FC<RoleFormProps> = ({ role, onSave, onClose }) => {
   const [name, setName] = useState(role?.name || "");
-  const [permissions, setPermissions] = useState<Permissions>(role?.permissions || defaultPermissions);
+  const [permissions, setPermissions] = useState<Permissions>(
+    role?.permissions || defaultPermissions
+  );
   const { toast } = useToast();
 
-  const handlePermissionChange = (permissionKey: keyof Permissions, checked: boolean) => {
-    setPermissions((prev) => ({
-      ...prev,
-      [permissionKey]: checked,
-    }));
+  const handlePermissionChange = (
+    key: keyof Permissions,
+    checked: boolean
+  ) => {
+    setPermissions((prev) => ({ ...prev, [key]: checked }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,26 +71,29 @@ const RoleForm: React.FC<RoleFormProps> = ({ role, onSave, onClose }) => {
       });
       return;
     }
-
     try {
       if (role) {
-        const updatedRole = await updateRole(role.id, { name, permissions });
-        if (updatedRole) {
-          toast({ title: "Sucesso", description: "Cargo atualizado com sucesso." });
-          onSave(updatedRole);
+        const updated = await updateRole(role.id, { name, permissions });
+        if (updated){
+          toast({ title: "Sucesso", description: "Cargo atualizado." });
+          onSave(updated);
         } else {
           throw new Error("Falha ao atualizar o cargo.");
         }
       } else {
-        const newRole = await addRole({ name, permissions });
-        toast({ title: "Sucesso", description: "Cargo adicionado com sucesso." });
-        onSave(newRole);
+        const created = await addRole({ name, permissions });
+        if (created){
+          toast({ title: "Sucesso", description: "Cargo criado." });
+          onSave(created);
+        } else {
+          throw new Error("Falha ao criar o cargo.");
+        }
       }
       onClose();
-    } catch (error: any) {
+    } catch (err: any) {
       toast({
         title: "Erro",
-        description: `Erro ao salvar cargo: ${error.message}`,
+        description: `Falha ao salvar: ${err.message}`,
         variant: "destructive",
       });
     }
@@ -93,27 +105,31 @@ const RoleForm: React.FC<RoleFormProps> = ({ role, onSave, onClose }) => {
         <Label htmlFor="name" className="text-right">
           Nome do Cargo
         </Label>
-        <Input id="name" value={name} onChange={(e) => setName(e.target.value)} className="col-span-3" />
+        <Input
+          id="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="col-span-3"
+        />
       </div>
       <div className="grid grid-cols-4 items-start gap-4">
         <Label className="text-right mt-2">Permissões</Label>
         <div className="col-span-3 grid grid-cols-2 gap-2">
           {Object.keys(defaultPermissions).map((key) => {
-            const permissionKey = key as keyof Permissions;
-            const labelText = key
+            const permKey = key as keyof Permissions;
+            const label = key
               .replace(/([A-Z])/g, " $1")
-              .replace(/^./, (str) => str.toUpperCase());
-
+              .replace(/^./, (s) => s.toUpperCase());
             return (
               <div key={key} className="flex items-center space-x-2">
                 <Checkbox
-                  id={permissionKey}
-                  checked={permissions[permissionKey]}
-                  onCheckedChange={(checked) =>
-                    handlePermissionChange(permissionKey, checked as boolean)
+                  id={permKey}
+                  checked={permissions[permKey]}
+                  onCheckedChange={(c) =>
+                    handlePermissionChange(permKey, c as boolean)
                   }
                 />
-                <Label htmlFor={permissionKey}>{labelText}</Label>
+                <Label htmlFor={permKey}>{label}</Label>
               </div>
             );
           })}
@@ -126,157 +142,159 @@ const RoleForm: React.FC<RoleFormProps> = ({ role, onSave, onClose }) => {
   );
 };
 
-
-const RolesPage = () => {
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingRole, setEditingRole] = useState<Role | undefined>(undefined);
-  const { toast } = useToast();
+export default function RolesPage() {
   const { hasPermission, loadingPermissions } = usePermissions();
   const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState(''); // New state for search term
+  const { toast } = useToast();
 
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<Role | undefined>();
+
+  // common loading container
+  const baseLoadingClasses =
+    "space-y-4 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10";
+
+  // ensure permission or redirect
   useEffect(() => {
     if (!loadingPermissions) {
       if (!hasPermission("adminSettings")) {
         toast({
           title: "Acesso Negado",
-          description: "Você não tem permissão para acessar esta página.",
+          description: "Permissão insuficiente.",
           variant: "destructive",
         });
-        router.push("/dashboard");
+        router.replace("/dashboard");
       } else {
         fetchRoles();
       }
     }
   }, [loadingPermissions, hasPermission, router, toast]);
 
-  const fetchRoles = async () => {
+  const fetchRoles = useCallback(async () => {
     setLoading(true);
     try {
-      const fetchedRoles = await getRoles();
-      setRoles(fetchedRoles);
-    } catch (error: any) {
+      const data = await getRoles();
+      setRoles(data);
+    } catch (err: any) {
       toast({
         title: "Erro",
-        description: `Erro ao carregar cargos: ${error.message}`,
+        description: `Falha ao carregar: ${err.message}`,
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const handleRoleSaved = (savedRole: Role) => {
+  const handleSave = (saved: Role) => {
     setRoles((prev) => {
-      const existingIndex = prev.findIndex((r) => r.id === savedRole.id);
-      if (existingIndex > -1) {
-        const newRoles = [...prev];
-        newRoles[existingIndex] = savedRole;
-        return newRoles;
+      const idx = prev.findIndex((r) => r.id === saved.id);
+      if (idx > -1) {
+        const copy = [...prev];
+        copy[idx] = saved;
+        return copy;
       }
-      return [...prev, savedRole];
+      return [...prev, saved];
     });
-    setEditingRole(undefined);
-    setIsFormOpen(false);
-    fetchRoles();
   };
 
-  const handleDeleteRole = async (id: string) => {
-    if (window.confirm("Tem certeza que deseja deletar este cargo?")) {
-      try {
-        const success = await deleteRole(id);
-        if (success) {
-          toast({ title: "Sucesso", description: "Cargo deletado com sucesso." });
-          setRoles((prev) => prev.filter((role) => role.id !== id));
-        } else {
-          throw new Error("Falha ao deletar o cargo.");
-        }
-      } catch (error: any) {
-        toast({
-          title: "Erro",
-          description: `Erro ao deletar cargo: ${error.message}`,
-          variant: "destructive",
-        });
-      }
+  const handleDelete = async (id: string) => {
+    if (!confirm("Confirma exclusão deste cargo?")) return;
+    try {
+      await deleteRole(id);
+      toast({ title: "Sucesso", description: "Cargo deletado." });
+      setRoles((prev) => prev.filter((r) => r.id !== id));
+    } catch (err: any) {
+      toast({
+        title: "Erro",
+        description: `Falha ao deletar: ${err.message}`,
+        variant: "destructive",
+      });
     }
   };
 
-  const handleEditClick = (role: Role) => {
-    setEditingRole(role);
-    setIsFormOpen(true);
-  };
-
-  const handleAddClick = () => {
-    setEditingRole(undefined);
-    setIsFormOpen(true);
-  };
-
-  const filteredRoles = roles.filter(role =>
-    role.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ); // Filter roles based on search term
+  const filtered = roles.filter((r) =>
+    r.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   if (loadingPermissions || !hasPermission("adminSettings")) {
     return (
-      <div className="hidden h-full flex-1 flex-col space-y-8 p-8 md:flex">
-        <Skeleton className="h-10 w-[300px]" />
-        <Skeleton className="h-[calc(100vh-200px)] w-full" />
+      <div className={baseLoadingClasses}>
+        <Skeleton className="h-10 w-1/3" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="hidden h-full flex-1 flex-col space-y-8 p-8 md:flex">
-      <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Gerenciamento de Cargos</h2>
-          <p className="text-muted-foreground">
-            Gerencie os cargos e suas respectivas permissões no sistema.
-          </p>
-        </div>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+      {/* title */}
+      <div>
+        <h2 className="text-2xl font-bold">Gerenciamento de Cargos</h2>
+        <p className="text-sm text-muted-foreground">
+          Gerencie os cargos e suas permissões no sistema.
+        </p>
+      </div>
+
+      {/* search under title */}
+      <div>
+        <Input
+          placeholder="Buscar cargos por nome..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full sm:w-1/2"
+        />
+      </div>
+
+      {/* new role button + dialog */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <div className="flex justify-end">
           <DialogTrigger asChild>
-            <Button onClick={handleAddClick}>
+            <Button onClick={() => setIsFormOpen(true)}>
               <PlusCircle className="mr-2 h-4 w-4" /> Novo Cargo
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>{editingRole ? "Editar Cargo" : "Adicionar Novo Cargo"}</DialogTitle>
-              <DialogDescription>
-                {editingRole
-                  ? "Faça as alterações no cargo aqui."
-                  : "Crie um novo cargo e defina suas permissões."}
-              </DialogDescription>
-            </DialogHeader>
-            <RoleForm
-              role={editingRole}
-              onSave={handleRoleSaved}
-              onClose={() => setIsFormOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+        </div>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>
+              {editingRole ? "Editar Cargo" : "Adicionar Novo Cargo"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingRole
+                ? "Ajuste as permissões do cargo."
+                : "Defina nome e permissões para o novo cargo."}
+            </DialogDescription>
+          </DialogHeader>
+          <RoleForm
+            role={editingRole}
+            onSave={(r) => {
+              handleSave(r);
+              fetchRoles();
+            }}
+            onClose={() => {
+              setIsFormOpen(false);
+              setEditingRole(undefined);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
-      <Input
-        placeholder="Buscar cargos por nome..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className="max-w-sm"
-      />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Cargos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div>Carregando cargos...</div>
-          ) : filteredRoles.length === 0 ? (
-            <div>Nenhum cargo encontrado.</div>
-          ) : (
-            <div className="border rounded-md">
+      {/* roles table */}
+      <div className="overflow-x-auto bg-white rounded-lg shadow-sm">
+        <Card>
+          <CardHeader>
+            <CardTitle>Cargos</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="p-4">Carregando cargos...</div>
+            ) : filtered.length === 0 ? (
+              <div className="p-4">Nenhum cargo encontrado.</div>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -286,39 +304,47 @@ const RolesPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRoles.map((role) => (
+                  {filtered.map((role) => (
                     <TableRow key={role.id}>
-                      <TableCell className="font-medium">{role.name}</TableCell>
+                      <TableCell className="font-medium">
+                        {role.name}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
-                          {Object.entries(role.permissions).map(([key, value]) => {
-                            const labelText = key
-                              .replace(/([A-Z])/g, " $1")
-                              .replace(/^./, (str) => str.toUpperCase());
-                            return value ? (
-                              <span
-                                key={key}
-                                className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
-                              >
-                                {labelText}
-                              </span>
-                            ) : null;
-                          })}
+                          {Object.entries(role.permissions).map(
+                            ([key, allowed]) => {
+                              if (!allowed) return null;
+                              const label = key
+                                .replace(/([A-Z])/g, " $1")
+                                .replace(/^./, (s) => s.toUpperCase());
+                              return (
+                                <span
+                                  key={key}
+                                  className="inline-flex items-center rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
+                                >
+                                  {label}
+                                </span>
+                              );
+                            }
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleEditClick(role)}
                           className="mr-2"
+                          onClick={() => {
+                            setEditingRole(role);
+                            setIsFormOpen(true);
+                          }}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteRole(role.id)}
+                          onClick={() => handleDelete(role.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -327,12 +353,10 @@ const RolesPage = () => {
                   ))}
                 </TableBody>
               </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
-};
-
-export default RolesPage;
+}
