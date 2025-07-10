@@ -11,7 +11,7 @@ import { usePermissions } from "@/context/PermissionsContext";
 import { Input } from "@/components/ui/input";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
-import { AddUserDialog } from "@/components/add-user-dialog";
+import { AddUserDialog } from "../../../../components/add-user-dialog";
 
 export default function ManageUsersPage() {
   const { hasPermission, loadingPermissions } = usePermissions();
@@ -83,7 +83,7 @@ export default function ManageUsersPage() {
   return (
     <PageLayout
         title="Gerenciamento de Usuários"
-        description="Gerencie os usuários do sistema, atribua funções e controle o acesso."
+        description="Nesta página, você pode gerenciar os usuários cadastrados no sistema."
         icon={<UsersIcon className="w-8 h-8 text-primary" />}
         isLoading={loadingPermissions || loadingData}
         canAccess={canAccess}
