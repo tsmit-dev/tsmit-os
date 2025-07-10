@@ -31,11 +31,13 @@ import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
 import { getStatusColorStyle } from '../lib/status-colors';
+import { IconPicker, iconList, isIconName } from './icon-picker';
 
 const statusFormSchema = z.object({
   name: z.string().min(3, { message: 'O nome deve ter pelo menos 3 caracteres.' }),
   order: z.coerce.number().int().positive({ message: 'A ordem deve ser um número positivo.' }),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, { message: 'Por favor, insira uma cor hexadecimal válida (ex: #RRGGBB).' }),
+  icon: z.enum(iconList).optional(),
   isInitial: z.boolean().default(false),
   triggersEmail: z.boolean().default(false),
   isPickupStatus: z.boolean().default(false),
@@ -77,6 +79,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
       name: '',
       order: 1,
       color: '#808080',
+      icon: 'Package' as typeof iconList[number],
       isInitial: false,
       triggersEmail: false,
       isPickupStatus: false,
@@ -93,6 +96,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
           name: status.name,
           order: status.order,
           color: status.color || '#808080',
+          icon: isIconName(status.icon || '') ? (status.icon as typeof iconList[number]) : 'Package',
           isInitial: status.isInitial ?? false,
           triggersEmail: status.triggersEmail ?? false,
           isPickupStatus: status.isPickupStatus ?? false,
@@ -108,6 +112,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
           name: '',
           order: nextOrder,
           color: '#808080',
+          icon: 'Package',
           isInitial: false,
           triggersEmail: false,
           isPickupStatus: false,
@@ -253,7 +258,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
                     name="order"
@@ -270,15 +275,30 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                     name="color"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Cor da Etiqueta</FormLabel>
+                        <FormLabel>Cor</FormLabel>
                         <FormControl>
                             <div className="flex items-center gap-2">
                                 <Input type="color" {...field} className="p-1 h-10 w-14" />
-                                <Input type="text" {...field} placeholder="#RRGGBB" className="flex-1" />
                             </div>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="icon"
+                    render={({ field }) => (
+                        <FormItem>
+                           <FormLabel>Ícone</FormLabel>
+                           <FormControl>
+                                <IconPicker 
+                                    value={field.value} 
+                                    onChange={field.onChange}
+                                />
+                           </FormControl>
+                           <FormMessage />
+                        </FormItem>
                     )}
                   />
                 </div>

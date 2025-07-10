@@ -2,28 +2,20 @@
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, ReactNode } from 'react';
 import { usePermissions } from '@/context/PermissionsContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { getServiceOrders } from '@/lib/data';
-import { ServiceOrder, Status } from '@/lib/types';
-import { 
-    LayoutDashboard, 
-    ClipboardList, 
-    FlaskConical, 
-    Hourglass, 
-    PackageCheck, 
-    Truck, 
-    CircleHelp,
-    Users
-} from 'lucide-react';
+import { ServiceOrder } from '@/lib/types';
+import { LayoutDashboard, Users } from 'lucide-react';
 import { useStatuses } from '@/hooks/use-statuses';
+import { renderIcon } from '@/components/icon-picker';
 
 interface StatusStats {
     label: string;
     count: number;
-    icon: React.ElementType;
+    icon: ReactNode;
     color: string;
 }
 
@@ -31,15 +23,6 @@ interface AnalystStats {
     name: string;
     count: number;
 }
-
-const iconMap: { [key: string]: React.ElementType } = {
-    'aberta': ClipboardList,
-    'em_analise': FlaskConical,
-    'aguardando_peca': Hourglass,
-    'pronta_entrega': PackageCheck,
-    'entregue': Truck,
-};
-
 
 export default function DashboardPage() {
     const { hasPermission, loadingPermissions } = usePermissions();
@@ -74,7 +57,6 @@ export default function DashboardPage() {
             const allOrders = await getServiceOrders();
             const finalStatusIds = statuses.filter(s => s.isFinal).map(s => s.id);
             
-            // Filtra as OS que não estão finalizadas
             const orders = allOrders.filter(order => !finalStatusIds.includes(order.status.id));
             
             setTotalOrders(orders.length);
@@ -87,7 +69,7 @@ export default function DashboardPage() {
             const newAnalystCreatedCounts: Record<string, number> = {};
             const newAnalystDeliveredCounts: Record<string, number> = {};
 
-            allOrders.forEach((order: ServiceOrder) => { // Contabiliza totais em todas as OS
+            allOrders.forEach((order: ServiceOrder) => {
                 if (newStatusCounts[order.status.id] !== undefined) {
                     newStatusCounts[order.status.id]++;
                 }
@@ -137,15 +119,14 @@ export default function DashboardPage() {
         );
     }
 
-    const statusStatsArray: StatusStats[] = statuses.map(status => {
-        const iconName = status.name.toLowerCase().replace(/\s/g, '_');
-        return {
-            label: status.name,
-            count: statusCounts[status.id] || 0,
-            icon: iconMap[iconName] || CircleHelp,
-            color: status.color,
-        };
-    });
+    const statusStatsArray: StatusStats[] = statuses
+      .filter(status => !status.isFinal)
+      .map(status => ({
+        label: status.name,
+        count: statusCounts[status.id] || 0,
+        icon: renderIcon(status.icon),
+        color: status.color,
+    }));
 
     const analystCreatedStatsArray: AnalystStats[] = Object.entries(analystCreatedCounts).map(([name, count]) => ({
         name,
@@ -180,7 +161,9 @@ export default function DashboardPage() {
                     <Card key={index}>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">OS {stat.label}</CardTitle>
-                            <stat.icon className="h-4 w-4" style={{ color: stat.color }} />
+                            <span style={{ color: stat.color }}>
+                                {stat.icon}
+                            </span>
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">{stat.count}</div>

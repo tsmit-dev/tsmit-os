@@ -47,10 +47,11 @@ export interface Status {
   name: string;
   order: number;
   color: string;
+  icon?: string;
   isInitial?: boolean;
   triggersEmail?: boolean;
   allowedNextStatuses?: string[];
-  allowedPreviousStatuses?: string[]; // New field
+  allowedPreviousStatuses?: string[];
   isPickupStatus?: boolean;
   isFinal?: boolean;
 }
