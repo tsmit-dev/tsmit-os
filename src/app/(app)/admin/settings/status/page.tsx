@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, ReactNode } from 'react';
 import { collection, onSnapshot, orderBy, query, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Status } from '@/lib/types';
@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { renderIcon } from '@/components/icon-picker';
 
 export default function StatusSettingsPage() {
   const [statuses, setStatuses] = useState<Status[]>([]);
@@ -68,6 +69,13 @@ export default function StatusSettingsPage() {
   const handleDelete = (status: Status) => {
     setSelectedStatus(status);
     setIsDeleteDialogOpen(true);
+  };
+
+  const handleSuccess = (message: string) => {
+    toast({
+      title: 'Sucesso!',
+      description: message,
+    });
   };
 
   const confirmDelete = async () => {
@@ -113,6 +121,7 @@ export default function StatusSettingsPage() {
                 <TableHead className="w-[80px]">Ordem</TableHead>
                 <TableHead>Nome do Status</TableHead>
                 <TableHead className="w-[80px]">Cor</TableHead>
+                <TableHead className="w-[80px]">Ícone</TableHead>
                 <TableHead>Pronto p/ Retirada?</TableHead>
                 <TableHead>Status Final?</TableHead>
                 <TableHead>Status Inicial?</TableHead>
@@ -123,7 +132,7 @@ export default function StatusSettingsPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={9} className="text-center">
                     Carregando...
                   </TableCell>
                 </TableRow>
@@ -138,6 +147,11 @@ export default function StatusSettingsPage() {
                           className="h-4 w-4 rounded-full border" 
                           style={{ backgroundColor: status.color }} 
                         />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center">
+                        {renderIcon(status.icon)}
                       </div>
                     </TableCell>
                     <TableCell>{status.isPickupStatus ? 'Sim' : 'Não'}</TableCell>
@@ -168,7 +182,7 @@ export default function StatusSettingsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">
+                  <TableCell colSpan={9} className="text-center">
                     Nenhum status encontrado. Adicione um para começar.
                   </TableCell>
                 </TableRow>
@@ -181,6 +195,7 @@ export default function StatusSettingsPage() {
       <StatusFormDialog 
         isOpen={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
+        onSuccess={handleSuccess}
         status={selectedStatus}
         allStatuses={statuses}
         currentStatus={selectedStatus}

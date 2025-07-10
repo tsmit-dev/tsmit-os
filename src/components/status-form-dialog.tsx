@@ -31,7 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
 import { getStatusColorStyle } from '../lib/status-colors';
-import { IconPicker, iconList, isIconName } from './icon-picker';
+import { IconPicker, iconList, isIconName, IconName } from './icon-picker';
 
 const statusFormSchema = z.object({
   name: z.string().min(3, { message: 'O nome deve ter pelo menos 3 caracteres.' }),
@@ -51,12 +51,13 @@ type StatusFormValues = z.infer<typeof statusFormSchema>;
 interface StatusFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess: (message: string) => void;
   status?: Status | null;
   allStatuses: Status[];
   currentStatus?: Status | null;
 }
 
-export function StatusFormDialog({ isOpen, onClose, status, allStatuses, currentStatus }: StatusFormDialogProps) {
+export function StatusFormDialog({ isOpen, onClose, onSuccess, status, allStatuses }: StatusFormDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -92,11 +93,12 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
   useEffect(() => {
     if (isOpen) {
       if (status) {
+        const currentIcon: IconName = status.icon && isIconName(status.icon) ? status.icon : 'Package';
         form.reset({
           name: status.name,
           order: status.order,
           color: status.color || '#808080',
-          icon: status.icon && isIconName(status.icon) ? status.icon : 'Package',
+          icon: currentIcon,
           isInitial: status.isInitial ?? false,
           triggersEmail: status.triggersEmail ?? false,
           isPickupStatus: status.isPickupStatus ?? false,
@@ -105,9 +107,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
           allowedPreviousStatuses: status.allowedPreviousStatuses ?? [],
         });
       } else {
-        const nextOrder = allStatuses.length > 0
-            ? Math.max(...allStatuses.map(s => s.order)) + 1
-            : 1;
+        const nextOrder = allStatuses.length > 0 ? Math.max(...allStatuses.map(s => s.order)) + 1 : 1;
         form.reset({
           name: '',
           order: nextOrder,
@@ -128,18 +128,19 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
     return allStatuses.filter(s => s.id !== status?.id);
   }, [allStatuses, status]);
 
-
   const onSubmit = async (data: StatusFormValues) => {
     setLoading(true);
     try {
+      let successMessage = '';
       if (status) {
         const statusRef = doc(db, 'statuses', status.id);
         await updateDoc(statusRef, data);
-        toast({ title: 'Sucesso!', description: 'Status atualizado com sucesso.' });
+        successMessage = 'Status atualizado com sucesso.';
       } else {
         await addDoc(collection(db, 'statuses'), data);
-        toast({ title: 'Sucesso!', description: 'Novo status criado com sucesso.' });
+        successMessage = 'Novo status criado com sucesso.';
       }
+      onSuccess(successMessage);
     } catch (error) {
       console.error('Error saving status:', error);
       toast({ title: 'Erro', description: 'Ocorreu um erro ao salvar o status.', variant: 'destructive' });
@@ -167,35 +168,33 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                     <FormItem>
                       <div className="mb-2">
                         <FormLabel>Próximos Status Permitidos</FormLabel>
-                        <FormDescription>
-                          Selecione para quais status uma OS pode avançar.
-                        </FormDescription>
+                        <FormDescription>Selecione para quais status uma OS pode avançar.</FormDescription>
                       </div>
                       <ScrollArea className="h-48 rounded-md border p-4">
                         {filteredStatuses.map((item) => (
-                            <FormField
-                              key={item.id}
-                              control={form.control}
-                              name="allowedNextStatuses"
-                              render={({ field }) => (
-                                <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0 mb-3">
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={field.value?.includes(item.id)}
-                                      onCheckedChange={(checked) => {
-                                        return checked
-                                          ? field.onChange([...(field.value || []), item.id])
-                                          : field.onChange(field.value?.filter((value) => value !== item.id));
-                                      }}
-                                    />
-                                  </FormControl>
-                                  <FormLabel className="font-normal flex items-center gap-2">
-                                    <Badge variant="custom" style={getStatusColorStyle(item.color)}>{item.name}</Badge>
-                                  </FormLabel>
-                                </FormItem>
-                              )}
-                            />
-                          ))}
+                          <FormField
+                            key={item.id}
+                            control={form.control}
+                            name="allowedNextStatuses"
+                            render={({ field }) => (
+                              <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0 mb-3">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(item.id)}
+                                    onCheckedChange={(checked) => (
+                                      checked
+                                        ? field.onChange([...(field.value || []), item.id])
+                                        : field.onChange(field.value?.filter((value) => value !== item.id))
+                                    )}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal flex items-center gap-2">
+                                  <Badge variant="custom" style={getStatusColorStyle(item.color)}>{item.name}</Badge>
+                                </FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
                       </ScrollArea>
                       <FormMessage />
                     </FormItem>
@@ -209,35 +208,33 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                     <FormItem>
                       <div className="mb-2">
                         <FormLabel>Status Anteriores Permitidos</FormLabel>
-                        <FormDescription>
-                          Selecione de quais status uma OS pode retroceder.
-                        </FormDescription>
+                        <FormDescription>Selecione de quais status uma OS pode retroceder.</FormDescription>
                       </div>
                       <ScrollArea className="h-48 rounded-md border p-4">
                         {filteredStatuses.map((item) => (
-                            <FormField
-                              key={item.id}
-                              control={form.control}
-                              name="allowedPreviousStatuses"
-                              render={({ field }) => (
-                                <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0 mb-3">
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={field.value?.includes(item.id)}
-                                      onCheckedChange={(checked) => {
-                                        return checked
-                                          ? field.onChange([...(field.value || []), item.id])
-                                          : field.onChange(field.value?.filter((value) => value !== item.id));
-                                      }}
-                                    />
-                                  </FormControl>
-                                  <FormLabel className="font-normal flex items-center gap-2">
-                                    <Badge variant="custom" style={getStatusColorStyle(item.color)}>{item.name}</Badge>
-                                  </FormLabel>
-                                </FormItem>
-                              )}
-                            />
-                          ))}
+                          <FormField
+                            key={item.id}
+                            control={form.control}
+                            name="allowedPreviousStatuses"
+                            render={({ field }) => (
+                              <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0 mb-3">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(item.id)}
+                                    onCheckedChange={(checked) => (
+                                      checked
+                                        ? field.onChange([...(field.value || []), item.id])
+                                        : field.onChange(field.value?.filter((value) => value !== item.id))
+                                    )}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal flex items-center gap-2">
+                                  <Badge variant="custom" style={getStatusColorStyle(item.color)}>{item.name}</Badge>
+                                </FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
                       </ScrollArea>
                       <FormMessage />
                     </FormItem>
@@ -247,7 +244,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
 
               {/* Coluna da Direita */}
               <div className="space-y-4">
-                 <FormField
+                <FormField
                   control={form.control}
                   name="name"
                   render={({ field }) => (
@@ -277,9 +274,9 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                       <FormItem>
                         <FormLabel>Cor</FormLabel>
                         <FormControl>
-                            <div className="flex items-center gap-2">
-                                <Input type="color" {...field} className="p-1 h-10 w-14" />
-                            </div>
+                          <div className="flex items-center gap-2">
+                            <Input type="color" {...field} className="p-1 h-10 w-14" />
+                          </div>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -289,16 +286,13 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                     control={form.control}
                     name="icon"
                     render={({ field }) => (
-                        <FormItem>
-                           <FormLabel>Ícone</FormLabel>
-                           <FormControl>
-                                <IconPicker 
-                                    value={field.value} 
-                                    onChange={field.onChange}
-                                />
-                           </FormControl>
-                           <FormMessage />
-                        </FormItem>
+                      <FormItem>
+                        <FormLabel>Ícone</FormLabel>
+                        <FormControl>
+                          <IconPicker value={field.value} onChange={field.onChange} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
                   />
                 </div>
