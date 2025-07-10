@@ -167,7 +167,7 @@ export default function StatusSettingsPage() {
         </div>
 
         {/* tabela */}
-        <div className="rounded-md border">
+        <div className="rounded-md border bg-white overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
