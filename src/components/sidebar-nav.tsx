@@ -15,7 +15,7 @@ import {
   SidebarCollapsibleContent,
   useSidebar
 } from './ui/sidebar';
-import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, ClipboardList, LineChart, Settings, Scan, Gem, ListChecks } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, HardDrive, LogOut, PackageCheck, Users, Briefcase, ClipboardList, LineChart, Settings, Scan, Gem, ListChecks, Mail } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Badge } from './ui/badge';
@@ -61,7 +61,7 @@ export function SidebarNav() {
 
   const visibleItems = navItems.filter(item => hasPermission(item.permissionKey));
 
-  const canAccessAdminSettings = hasPermission('adminUsers') || hasPermission('adminSettings');
+  const canAccessAdminSettings = hasPermission('adminUsers') || hasPermission('adminSettings') || hasPermission('adminRoles') || hasPermission('adminServices');
 
   return (
     <>
@@ -100,58 +100,50 @@ export function SidebarNav() {
         {canAccessAdminSettings && (
             <SidebarCollapsible defaultOpen={pathname.startsWith('/admin')}>
               <SidebarCollapsibleButton className="flex items-center gap-2"> 
-                <Settings className="h-4 w-4" /> {/* Explicitly set size here */}
-                <span>Configurações</span>
+                <Settings className="h-4 w-4" />
+                <span>Admin</span>
               </SidebarCollapsibleButton>
               <SidebarCollapsibleContent>
-                <SidebarMenu> {/* Wrapped sub-items in SidebarMenu */}
+                <SidebarMenu>
                   {hasPermission('adminUsers') && (
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={pathname === '/admin/users'} tooltip="Gerenciamento de Usuários">
-                        <Link href="/admin/users">
-                          <Users />
-                          <span>Usuários</span>
-                        </Link>
+                      <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/users')} tooltip="Gerenciar usuários do sistema">
+                        <Link href="/admin/users"><Users /><span>Usuários</span></Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )}
                   {hasPermission('adminSettings') && (
+                     <SidebarMenuItem>
+                        <SidebarMenuButton asChild isActive={pathname === '/admin/settings'} tooltip="Ver todas as configurações">
+                            <Link href="/admin/settings"><Settings /><span>Geral</span></Link>
+                        </SidebarMenuButton>
+                     </SidebarMenuItem>
+                  )}
+                  {hasPermission('adminRoles') && (
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings/roles'} tooltip="Gerenciamento de Cargos">
-                        <Link href="/admin/settings/roles">
-                          <Gem />
-                          <span>Cargos</span>
-                        </Link>
+                      <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/settings/roles')} tooltip="Gerenciar cargos e permissões">
+                        <Link href="/admin/settings/roles"><Gem /><span>Cargos</span></Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )}
                    {hasPermission('adminSettings') && (
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings/status'} tooltip="Status da OS">
-                        <Link href="/admin/settings/status">
-                          <ListChecks />
-                          <span>Status</span>
-                        </Link>
+                      <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/settings/status')} tooltip="Gerenciar status das OS">
+                        <Link href="/admin/settings/status"><ListChecks /><span>Status</span></Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                  {hasPermission('adminServices') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/settings/services')} tooltip="Gerenciar serviços fornecidos">
+                        <Link href="/admin/settings/services"><ClipboardList /><span>Serviços</span></Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )}
                   {hasPermission('adminSettings') && (
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings'} tooltip="Configurações de E-mail">
-                        <Link href="/admin/settings">
-                          <Settings />
-                          <span>E-mail</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )}
-                  {hasPermission('adminSettings') && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={pathname === '/admin/settings/services'} tooltip="Serviços Fornecidos">
-                        <Link href="/admin/settings/services">
-                          <ClipboardList />
-                          <span>Serviços Fornecidos</span>
-                        </Link>
+                      <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/settings/integrations')} tooltip="Configurar integrações">
+                        <Link href="/admin/settings/integrations"><Mail /><span>Integrações</span></Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )}
