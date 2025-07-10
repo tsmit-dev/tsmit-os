@@ -11,7 +11,6 @@ import { usePermissions } from '@/context/PermissionsContext';
 import { Input } from '@/components/ui/input';
 import { PageLayout } from '@/components/page-layout';
 import { Button } from '@/components/ui/button';
-import { AddClientDialog } from '../../../components/add-client-dialog';
 
 export default function ManageClientsPage() {
     const router = useRouter();
@@ -74,7 +73,7 @@ export default function ManageClientsPage() {
     return (
         <PageLayout
             title="Gerenciamento de Clientes"
-            description='Nesta página, você pode gerenciar os clientes cadastrados no sistema. Utilize a barra de busca para encontrar clientes específicos e o botão "Adicionar Cliente" para cadastrar novos clientes.'
+            description='Nesta página, você pode gerenciar os clientes cadastrados no sistema.'
             icon={<Briefcase className="w-8 h-8 text-primary" />}
             isLoading={loadingPermissions || loadingClients}
             canAccess={canAccess}
@@ -82,11 +81,6 @@ export default function ManageClientsPage() {
             actionButton={actionButton}
         >
             <ClientsTable clients={filteredClients} onClientChange={fetchClients} />
-            <AddClientDialog
-                isOpen={isAddClientDialogOpen}
-                onOpenChange={setAddClientDialogOpen}
-                onClientAdded={fetchClients}
-            />
         </PageLayout>
     );
 }

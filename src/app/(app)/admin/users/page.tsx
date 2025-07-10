@@ -83,6 +83,7 @@ export default function ManageUsersPage() {
   return (
     <PageLayout
         title="Gerenciamento de Usuários"
+        description="Gerencie os usuários do sistema, atribua funções e controle o acesso."
         icon={<UsersIcon className="w-8 h-8 text-primary" />}
         isLoading={loadingPermissions || loadingData}
         canAccess={canAccess}
