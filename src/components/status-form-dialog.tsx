@@ -91,38 +91,36 @@ export function StatusFormDialog({ isOpen, onClose, onSuccess, status, allStatus
   });
 
   useEffect(() => {
-    if (isOpen) {
-      if (status) {
-        const currentIcon: IconName = status.icon && isIconName(status.icon) ? status.icon : 'Package';
-        form.reset({
-          name: status.name,
-          order: status.order,
-          color: status.color || '#808080',
-          icon: currentIcon,
-          isInitial: status.isInitial ?? false,
-          triggersEmail: status.triggersEmail ?? false,
-          isPickupStatus: status.isPickupStatus ?? false,
-          isFinal: status.isFinal ?? false,
-          allowedNextStatuses: status.allowedNextStatuses ?? [],
-          allowedPreviousStatuses: status.allowedPreviousStatuses ?? [],
-        });
-      } else {
-        const nextOrder = allStatuses.length > 0 ? Math.max(...allStatuses.map(s => s.order)) + 1 : 1;
-        form.reset({
-          name: '',
-          order: nextOrder,
-          color: '#808080',
-          icon: 'Package',
-          isInitial: false,
-          triggersEmail: false,
-          isPickupStatus: false,
-          isFinal: false,
-          allowedNextStatuses: [],
-          allowedPreviousStatuses: [],
-        });
-      }
+    if (status) {
+      const currentIcon: IconName = status.icon && isIconName(status.icon) ? status.icon : 'Package';
+      form.reset({
+        name: status.name,
+        order: status.order,
+        color: status.color || '#808080',
+        icon: currentIcon,
+        isInitial: status.isInitial ?? false,
+        triggersEmail: status.triggersEmail ?? false,
+        isPickupStatus: status.isPickupStatus ?? false,
+        isFinal: status.isFinal ?? false,
+        allowedNextStatuses: status.allowedNextStatuses ?? [],
+        allowedPreviousStatuses: status.allowedPreviousStatuses ?? [],
+      });
+    } else {
+      const nextOrder = allStatuses.length > 0 ? Math.max(...allStatuses.map(s => s.order)) + 1 : 1;
+      form.reset({
+        name: '',
+        order: nextOrder,
+        color: '#808080',
+        icon: 'Package',
+        isInitial: false,
+        triggersEmail: false,
+        isPickupStatus: false,
+        isFinal: false,
+        allowedNextStatuses: [],
+        allowedPreviousStatuses: [],
+      });
     }
-  }, [status, allStatuses, form, isOpen]);
+  }, [status, allStatuses, form]);
 
   const filteredStatuses = useMemo(() => {
     return allStatuses.filter(s => s.id !== status?.id);
