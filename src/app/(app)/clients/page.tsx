@@ -65,10 +65,6 @@ export default function ManageClientsPage() {
             className="w-full sm:w-80"
         />
     );
-    
-    const actionButton = (
-        <Button onClick={() => setAddClientDialogOpen(true)}>Adicionar Cliente</Button>
-    );
 
     return (
         <PageLayout
@@ -78,7 +74,6 @@ export default function ManageClientsPage() {
             isLoading={loadingPermissions || loadingClients}
             canAccess={canAccess}
             searchBar={searchBar}
-            actionButton={actionButton}
         >
             <ClientsTable clients={filteredClients} onClientChange={fetchClients} />
         </PageLayout>
