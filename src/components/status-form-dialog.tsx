@@ -79,7 +79,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
       name: '',
       order: 1,
       color: '#808080',
-      icon: 'Package' as typeof iconList[number],
+      icon: 'Package',
       isInitial: false,
       triggersEmail: false,
       isPickupStatus: false,
@@ -96,7 +96,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
           name: status.name,
           order: status.order,
           color: status.color || '#808080',
-          icon: isIconName(status.icon || '') ? (status.icon as typeof iconList[number]) : 'Package',
+          icon: status.icon && isIconName(status.icon) ? status.icon : 'Package',
           isInitial: status.isInitial ?? false,
           triggersEmail: status.triggersEmail ?? false,
           isPickupStatus: status.isPickupStatus ?? false,
@@ -140,12 +140,12 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
         await addDoc(collection(db, 'statuses'), data);
         toast({ title: 'Sucesso!', description: 'Novo status criado com sucesso.' });
       }
-      onClose();
     } catch (error) {
       console.error('Error saving status:', error);
       toast({ title: 'Erro', description: 'Ocorreu um erro ao salvar o status.', variant: 'destructive' });
     } finally {
       setLoading(false);
+      onClose();
     }
   };
 
@@ -303,7 +303,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                   />
                 </div>
                 
-                <div className="space-y-2 pt-4">
+                <div className="space-y-2">
                   <FormField
                     control={form.control}
                     name="isInitial"

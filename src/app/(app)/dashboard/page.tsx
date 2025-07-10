@@ -119,9 +119,7 @@ export default function DashboardPage() {
         );
     }
 
-    const statusStatsArray: StatusStats[] = statuses
-      .filter(status => !status.isFinal)
-      .map(status => ({
+    const statusStatsArray: StatusStats[] = statuses.map(status => ({
         label: status.name,
         count: statusCounts[status.id] || 0,
         icon: renderIcon(status.icon),
@@ -144,7 +142,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total de OS Ativas</CardTitle>
@@ -174,7 +172,7 @@ export default function DashboardPage() {
                     </Card>
                 ))}
                 {analystCreatedStatsArray.length > 0 && (
-                    <Card className="md:col-span-2 lg:col-span-3">
+                    <Card className="md:col-span-2 lg:col-span-3 xl:col-span-4">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">OS por Analista - Criadas</CardTitle>
                             <Users className="h-4 w-4 text-muted-foreground" />
@@ -192,7 +190,7 @@ export default function DashboardPage() {
                     </Card>
                 )}
                 {analystDeliveredStatsArray.length > 0 && (
-                    <Card className="md:col-span-2 lg:col-span-3">
+                    <Card className="md:col-span-2 lg:col-span-4">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">OS por Analista - Finalizadas</CardTitle>
                             <Users className="h-4 w-4 text-muted-foreground" />
