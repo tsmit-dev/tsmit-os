@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,15 +11,15 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from '@/lib/firebase';
 import { Role } from "@/lib/types";
+import { PlusCircle, Loader2 } from 'lucide-react';
 
 export interface AddUserDialogProps {
-    isOpen: boolean;
-    onOpenChange: (isOpen: boolean) => void;
     onUserAdded: () => void;
     roles?: Role[];
 }
 
-export function AddUserDialog({ isOpen, onOpenChange, onUserAdded, roles = [] }: AddUserDialogProps) {
+export function AddUserDialog({ onUserAdded, roles = [] }: AddUserDialogProps) {
+    const [isOpen, setIsOpen] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
@@ -27,8 +27,8 @@ export function AddUserDialog({ isOpen, onOpenChange, onUserAdded, roles = [] }:
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
 
-    useEffect(() => {
-        if (isOpen) {
+    const handleOpenChange = (open: boolean) => {
+        if (open) {
             // Reset form when dialog opens
             setEmail('');
             setPassword('');
@@ -39,7 +39,8 @@ export function AddUserDialog({ isOpen, onOpenChange, onUserAdded, roles = [] }:
                 setRoleId('');
             }
         }
-    }, [isOpen, roles]);
+        setIsOpen(open);
+    };
 
     const handleAddUser = async () => {
         if (!name || !email || !password || !roleId) {
@@ -68,7 +69,7 @@ export function AddUserDialog({ isOpen, onOpenChange, onUserAdded, roles = [] }:
                 description: `Usuário ${name} adicionado com sucesso.`,
             });
             onUserAdded();
-            onOpenChange(false);
+            handleOpenChange(false);
         } catch (error: any) {
             console.error("Erro ao adicionar usuário:", error);
             let errorMessage = "Ocorreu um erro ao adicionar o usuário.";
@@ -90,7 +91,13 @@ export function AddUserDialog({ isOpen, onOpenChange, onUserAdded, roles = [] }:
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+            <DialogTrigger asChild>
+                <Button>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Adicionar Usuário
+                </Button>
+            </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>Adicionar Novo Usuário</DialogTitle>
@@ -155,9 +162,9 @@ export function AddUserDialog({ isOpen, onOpenChange, onUserAdded, roles = [] }:
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancelar</Button>
                     <Button onClick={handleAddUser} disabled={loading}>
-                        {loading ? 'Adicionando...' : 'Adicionar Usuário'}
+                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Adicionar Usuário'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

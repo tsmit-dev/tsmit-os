@@ -10,8 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/context/PermissionsContext";
 import { Input } from "@/components/ui/input";
 import { PageLayout } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
-import { AddUserDialog } from "../../../../components/add-user-dialog";
+import { AddUserDialog } from "@/components/add-user-dialog";
 
 export default function ManageUsersPage() {
   const { hasPermission, loadingPermissions } = usePermissions();
@@ -22,15 +21,13 @@ export default function ManageUsersPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isAddUserDialogOpen, setAddUserDialogOpen] = useState(false);
 
   const canAccess = hasPermission("adminUsers");
 
   const fetchData = useCallback(async () => {
     setLoadingData(true);
     try {
-      const usersData = await getUsers();
-      const rolesData = await getRoles();
+      const [usersData, rolesData] = await Promise.all([getUsers(), getRoles()]);
       setUsers(usersData);
       setRoles(rolesData);
     } catch (error) {
@@ -77,7 +74,7 @@ export default function ManageUsersPage() {
   );
   
   const actionButton = (
-    <Button onClick={() => setAddUserDialogOpen(true)}>Adicionar Usuário</Button>
+    <AddUserDialog onUserAdded={fetchData} roles={roles} />
   );
 
   return (
@@ -91,12 +88,6 @@ export default function ManageUsersPage() {
         actionButton={actionButton}
     >
         <UsersTable users={filteredUsers} onUserChange={fetchData} />
-        <AddUserDialog
-            isOpen={isAddUserDialogOpen}
-            onOpenChange={setAddUserDialogOpen}
-            onUserAdded={fetchData}
-            roles={roles}
-        />
     </PageLayout>
   );
 }
