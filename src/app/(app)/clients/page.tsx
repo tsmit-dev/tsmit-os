@@ -74,6 +74,7 @@ export default function ManageClientsPage() {
     return (
         <PageLayout
             title="Gerenciamento de Clientes"
+            description='Nesta página, você pode gerenciar os clientes cadastrados no sistema. Utilize a barra de busca para encontrar clientes específicos e o botão "Adicionar Cliente" para cadastrar novos clientes.'
             icon={<Briefcase className="w-8 h-8 text-primary" />}
             isLoading={loadingPermissions || loadingClients}
             canAccess={canAccess}
