@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,63 +10,74 @@ import { useToast } from '@/hooks/use-toast';
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from '@/lib/firebase';
-import { Role, User } from "@/lib/types"; // Import Role type
+import { Role } from "@/lib/types";
 
-interface AddUserDialogProps {
+export interface AddUserDialogProps {
+    isOpen: boolean;
+    onOpenChange: (isOpen: boolean) => void;
     onUserAdded: () => void;
-    roles: Role[]; // Add roles prop
+    roles?: Role[];
 }
 
-export function AddUserDialog({ onUserAdded, roles }: AddUserDialogProps) {
+export function AddUserDialog({ isOpen, onOpenChange, onUserAdded, roles = [] }: AddUserDialogProps) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
-    const [roleId, setRoleId] = useState(''); // Changed to roleId
+    const [roleId, setRoleId] = useState('');
     const [loading, setLoading] = useState(false);
-    const [isOpen, setIsOpen] = useState(false);
     const { toast } = useToast();
 
     useEffect(() => {
-        // Set a default role if roles are loaded and no roleId is selected
-        if (roles.length > 0 && !roleId) {
-            setRoleId(roles[0].id); 
+        if (isOpen) {
+            // Reset form when dialog opens
+            setEmail('');
+            setPassword('');
+            setName('');
+            if (roles.length > 0) {
+                setRoleId(roles[0].id);
+            } else {
+                setRoleId('');
+            }
         }
-    }, [roles, roleId]);
+    }, [isOpen, roles]);
 
     const handleAddUser = async () => {
+        if (!name || !email || !password || !roleId) {
+            toast({
+                title: "Erro",
+                description: "Por favor, preencha todos os campos.",
+                variant: "destructive",
+            });
+            return;
+        }
+
         setLoading(true);
         try {
-            // Create user in Firebase Authentication
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // Save user role and basic info to Firestore
             await setDoc(doc(db, "users", user.uid), {
                 name: name,
                 email: user.email,
-                roleId: roleId, // Save the roleId
+                roleId: roleId,
                 createdAt: new Date().toISOString(),
             });
 
             toast({
                 title: "Sucesso!",
-                description: `Usuário ${email} adicionado com sucesso.`,
+                description: `Usuário ${name} adicionado com sucesso.`,
             });
-            setEmail('');
-            setPassword('');
-            setName('');
-            setRoleId(''); // Reset roleId state
-            setIsOpen(false);
             onUserAdded();
+            onOpenChange(false);
         } catch (error: any) {
             console.error("Erro ao adicionar usuário:", error);
             let errorMessage = "Ocorreu um erro ao adicionar o usuário.";
             if (error.code === 'auth/email-already-in-use') {
                 errorMessage = "Este e-mail já está em uso.";
             } else if (error.code === 'auth/weak-password') {
-                errorMessage = "A senha é muito fraca. Ela deve ter pelo menos 6 caracteres.";
+                errorMessage = "A senha deve ter pelo menos 6 caracteres.";
             } else if (error.code === 'auth/invalid-email') {
-                errorMessage = "O formato do e-mail é inválido.";
+                errorMessage = "O e-mail fornecido é inválido.";
             }
             toast({
                 title: "Erro",
@@ -79,10 +90,7 @@ export function AddUserDialog({ onUserAdded, roles }: AddUserDialogProps) {
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogTrigger asChild>
-                <Button>Adicionar Novo Usuário</Button>
-            </DialogTrigger>
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>Adicionar Novo Usuário</DialogTitle>
@@ -100,7 +108,6 @@ export function AddUserDialog({ onUserAdded, roles }: AddUserDialogProps) {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             className="col-span-3"
-                            required
                         />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
@@ -113,7 +120,6 @@ export function AddUserDialog({ onUserAdded, roles }: AddUserDialogProps) {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="col-span-3"
-                            required
                         />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
@@ -126,7 +132,6 @@ export function AddUserDialog({ onUserAdded, roles }: AddUserDialogProps) {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             className="col-span-3"
-                            required
                         />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
@@ -138,15 +143,20 @@ export function AddUserDialog({ onUserAdded, roles }: AddUserDialogProps) {
                                 <SelectValue placeholder="Selecione uma função" />
                             </SelectTrigger>
                             <SelectContent>
-                                {roles.map(roleItem => (
-                                    <SelectItem key={roleItem.id} value={roleItem.id}>{roleItem.name}</SelectItem>
-                                ))}
+                                {roles.length > 0 ? (
+                                    roles.map(roleItem => (
+                                        <SelectItem key={roleItem.id} value={roleItem.id}>{roleItem.name}</SelectItem>
+                                    ))
+                                ) : (
+                                    <SelectItem value="" disabled>Nenhuma função disponível</SelectItem>
+                                )}
                             </SelectContent>
                         </Select>
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button onClick={handleAddUser} disabled={loading || !roleId}> {/* Disable if no role is selected */}
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button onClick={handleAddUser} disabled={loading}>
                         {loading ? 'Adicionando...' : 'Adicionar Usuário'}
                     </Button>
                 </DialogFooter>

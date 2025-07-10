@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { getServiceOrders } from '@/lib/data';
 import { ServiceOrder } from '@/lib/types';
 import { OsTable } from '@/components/os-table';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useRouter } from 'next/navigation';
 import { usePermissions } from '@/context/PermissionsContext';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { useStatuses } from '@/hooks/use-statuses';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { PageLayout } from '@/components/page-layout';
+import { ListTodo } from 'lucide-react';
 
 export default function AllOsPage() {
     const [orders, setOrders] = useState<ServiceOrder[]>([]);
@@ -23,22 +24,9 @@ export default function AllOsPage() {
     const { statuses, loading: loadingStatuses } = useStatuses();
     const [showFinalized, setShowFinalized] = useState(false);
 
-    useEffect(() => {
-        if (!loadingPermissions && !loadingStatuses) {
-            if (!hasPermission('os')) {
-                toast({
-                    title: "Acesso Negado",
-                    description: "Você não tem permissão para acessar esta página.",
-                    variant: "destructive",
-                });
-                router.replace('/dashboard');
-                return;
-            }
-            fetchOrders();
-        }
-    }, [loadingPermissions, loadingStatuses, hasPermission, router, toast]);
+    const canAccess = hasPermission('os');
 
-    const fetchOrders = async () => {
+    const fetchOrders = useCallback(async () => {
         setLoading(true);
         try {
             const data = await getServiceOrders();
@@ -49,7 +37,22 @@ export default function AllOsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        if (!loadingPermissions && !loadingStatuses) {
+            if (!canAccess) {
+                toast({
+                    title: "Acesso Negado",
+                    description: "Você não tem permissão para acessar esta página.",
+                    variant: "destructive",
+                });
+                router.replace('/dashboard');
+            } else {
+                fetchOrders();
+            }
+        }
+    }, [loadingPermissions, loadingStatuses, canAccess, router, toast, fetchOrders]);
 
     const finalStatusIds = statuses.filter(s => s.isFinal).map(s => s.id);
 
@@ -66,45 +69,41 @@ export default function AllOsPage() {
             order.equipment.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
             order.equipment.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
             order.equipment.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.analyst.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (order.analyst && order.analyst.toLowerCase().includes(searchTerm.toLowerCase())) ||
             order.status.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     });
 
-    if (loadingPermissions || loadingStatuses || !hasPermission('os') || loading) {
-        return (
-            <div className="space-y-4 p-4 sm:p-6 lg:p-8">
-                <Skeleton className="h-10 w-1/3" />
-                <div className="border rounded-md p-4 space-y-2">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-[80%]" />
-                </div>
-            </div>
-        )
-    }
+    const searchBar = (
+        <Input
+            placeholder="Buscar OS..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full sm:w-80"
+        />
+    );
+
+    const actionButton = (
+         <div className="flex items-center space-x-2">
+            <Checkbox
+                id="showFinalized"
+                checked={showFinalized}
+                onCheckedChange={() => setShowFinalized(!showFinalized)}
+            />
+            <Label htmlFor="showFinalized">Incluir OS Finalizadas</Label>
+        </div>
+    )
 
     return (
-        <div className="container mx-auto">
-            <h1 className="text-3xl font-bold mb-6 font-headline">Todas as Ordens de Serviço</h1>
-            <div className="flex justify-between items-center mb-4">
-                <Input
-                    placeholder="Buscar OS por número, cliente, equipamento, analista, status..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="max-w-xl"
-                />
-                <div className="flex items-center space-x-2">
-                    <Checkbox
-                        id="showFinalized"
-                        checked={showFinalized}
-                        onCheckedChange={() => setShowFinalized(!showFinalized)}
-                    />
-                    <Label htmlFor="showFinalized">Incluir OS Finalizadas</Label>
-                </div>
-            </div>
+        <PageLayout
+            title="Todas as Ordens de Serviço"
+            icon={<ListTodo className="w-8 h-8 text-primary" />}
+            isLoading={loadingPermissions || loadingStatuses || loading}
+            canAccess={canAccess}
+            searchBar={searchBar}
+            actionButton={actionButton}
+        >
             <OsTable orders={filteredOrders} title="Registros de OS" />
-        </div>
+        </PageLayout>
     );
 }

@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import { Client } from '@/lib/types';
 import { getClients } from '@/lib/data';
 import { Briefcase } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ClientsTable } from '@/components/clients-table';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/context/PermissionsContext';
-import { Input } from '@/components/ui/input'; // Import Input component
+import { Input } from '@/components/ui/input';
+import { PageLayout } from '@/components/page-layout';
+import { Button } from '@/components/ui/button';
+import { AddClientDialog } from '../../../components/add-client-dialog';
 
 export default function ManageClientsPage() {
     const router = useRouter();
@@ -17,7 +19,10 @@ export default function ManageClientsPage() {
     const [clients, setClients] = useState<Client[]>([]);
     const [loadingClients, setLoadingClients] = useState(true);
     const { hasPermission, loadingPermissions } = usePermissions();
-    const [searchTerm, setSearchTerm] = useState(''); // New state for search term
+    const [searchTerm, setSearchTerm] = useState('');
+    const [isAddClientDialogOpen, setAddClientDialogOpen] = useState(false);
+
+    const canAccess = hasPermission('clients');
 
     const fetchClients = useCallback(async () => {
         setLoadingClients(true);
@@ -34,50 +39,53 @@ export default function ManageClientsPage() {
 
     useEffect(() => {
         if (!loadingPermissions) {
-            if (!hasPermission('clients')) {
+            if (!canAccess) {
                 toast({
                     title: "Acesso Negado",
                     description: "Você não tem permissão para acessar esta página.",
                     variant: "destructive",
                 });
                 router.replace('/dashboard');
-                return;
+            } else {
+                fetchClients();
             }
-            fetchClients();
         }
-    }, [loadingPermissions, hasPermission, router, toast, fetchClients]);
+    }, [loadingPermissions, canAccess, router, toast, fetchClients]);
     
     const filteredClients = clients.filter(client =>
         client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (client.cnpj && client.cnpj.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (client.address && client.address.toLowerCase().includes(searchTerm.toLowerCase()))
-    ); // Filter clients based on search term
+    );
 
-    if (loadingPermissions || !hasPermission('clients') || loadingClients) {
-         return (
-             <div className="space-y-4 p-4 sm:p-6 lg:p-8">
-                <div className="flex justify-between items-center">
-                    <Skeleton className="h-10 w-1/3" />
-                    <Skeleton className="h-10 w-32" />
-                </div>
-                <Skeleton className="h-64 w-full" />
-            </div>
-        );
-    }
+    const searchBar = (
+        <Input
+            placeholder="Buscar por nome, CNPJ ou endereço..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full sm:w-80"
+        />
+    );
+    
+    const actionButton = (
+        <Button onClick={() => setAddClientDialogOpen(true)}>Adicionar Cliente</Button>
+    );
 
     return (
-        <div className="container mx-auto space-y-6">
-            <div className="flex items-center gap-4">
-                <Briefcase className="w-8 h-8 text-primary" />
-                <h1 className="text-3xl font-bold font-headline">Gerenciamento de Clientes</h1>
-            </div>
-            <Input
-                placeholder="Buscar clientes por nome, CNPJ ou endereço..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="max-w-sm"
-            />
+        <PageLayout
+            title="Gerenciamento de Clientes"
+            icon={<Briefcase className="w-8 h-8 text-primary" />}
+            isLoading={loadingPermissions || loadingClients}
+            canAccess={canAccess}
+            searchBar={searchBar}
+            actionButton={actionButton}
+        >
             <ClientsTable clients={filteredClients} onClientChange={fetchClients} />
-        </div>
+            <AddClientDialog
+                isOpen={isAddClientDialogOpen}
+                onOpenChange={setAddClientDialogOpen}
+                onClientAdded={fetchClients}
+            />
+        </PageLayout>
     );
 }
