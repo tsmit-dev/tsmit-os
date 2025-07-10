@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -27,7 +27,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Status } from '@/lib/types';
 import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
 import { getStatusColorStyle } from '../lib/status-colors';
@@ -46,116 +45,63 @@ const statusFormSchema = z.object({
   allowedPreviousStatuses: z.array(z.string()).default([]),
 });
 
-type StatusFormValues = z.infer<typeof statusFormSchema>;
+export type StatusFormValues = z.infer<typeof statusFormSchema>;
 
 interface StatusFormDialogProps {
-  isOpen: boolean;
   onClose: () => void;
-  onSuccess: (message: string) => void;
+  onSave: (data: StatusFormValues) => Promise<void>;
   status?: Status | null;
   allStatuses: Status[];
-  currentStatus?: Status | null;
 }
 
-export function StatusFormDialog({ isOpen, onClose, onSuccess, status, allStatuses }: StatusFormDialogProps) {
-  const { toast } = useToast();
+export function StatusFormDialog({ onClose, onSave, status, allStatuses }: StatusFormDialogProps) {
   const [loading, setLoading] = useState(false);
 
-  const dynamicStatusSchema = statusFormSchema.refine(
-    (data) => {
-      const isOrderTaken = allStatuses.some(
-        (s) => s.order === data.order && s.id !== status?.id
-      );
-      return !isOrderTaken;
-    },
-    {
-      message: 'Esta ordem já está em uso por outro status.',
-      path: ['order'],
-    }
-  );
-
   const form = useForm<StatusFormValues>({
-    resolver: zodResolver(dynamicStatusSchema),
-    defaultValues: {
-      name: '',
-      order: 1,
-      color: '#808080',
-      icon: 'Package',
-      isInitial: false,
-      triggersEmail: false,
-      isPickupStatus: false,
-      isFinal: false,
-      allowedNextStatuses: [],
-      allowedPreviousStatuses: [],
-    },
+    resolver: zodResolver(statusFormSchema),
+    defaultValues: status 
+      ? {
+          ...status,
+          icon: isIconName(status.icon || "") ? status.icon : 'Package',
+        }
+      : {
+          name: '',
+          order: allStatuses.length > 0 ? Math.max(...allStatuses.map(s => s.order)) + 1 : 1,
+          color: '#808080',
+          icon: 'Package',
+          isInitial: false,
+          triggersEmail: false,
+          isPickupStatus: false,
+          isFinal: false,
+          allowedNextStatuses: [],
+          allowedPreviousStatuses: [],
+        },
   });
-
-  useEffect(() => {
-    if (status) {
-      const currentIcon: IconName = status.icon && isIconName(status.icon) ? status.icon : 'Package';
-      form.reset({
-        name: status.name,
-        order: status.order,
-        color: status.color || '#808080',
-        icon: currentIcon,
-        isInitial: status.isInitial ?? false,
-        triggersEmail: status.triggersEmail ?? false,
-        isPickupStatus: status.isPickupStatus ?? false,
-        isFinal: status.isFinal ?? false,
-        allowedNextStatuses: status.allowedNextStatuses ?? [],
-        allowedPreviousStatuses: status.allowedPreviousStatuses ?? [],
-      });
-    } else {
-      const nextOrder = allStatuses.length > 0 ? Math.max(...allStatuses.map(s => s.order)) + 1 : 1;
-      form.reset({
-        name: '',
-        order: nextOrder,
-        color: '#808080',
-        icon: 'Package',
-        isInitial: false,
-        triggersEmail: false,
-        isPickupStatus: false,
-        isFinal: false,
-        allowedNextStatuses: [],
-        allowedPreviousStatuses: [],
-      });
-    }
-  }, [status, allStatuses, form]);
 
   const filteredStatuses = useMemo(() => {
     return allStatuses.filter(s => s.id !== status?.id);
   }, [allStatuses, status]);
 
-  const onSubmit = async (data: StatusFormValues) => {
+  const handleSubmit = async (data: StatusFormValues) => {
     setLoading(true);
     try {
-      let successMessage = '';
-      if (status) {
-        const statusRef = doc(db, 'statuses', status.id);
-        await updateDoc(statusRef, data);
-        successMessage = 'Status atualizado com sucesso.';
-      } else {
-        await addDoc(collection(db, 'statuses'), data);
-        successMessage = 'Novo status criado com sucesso.';
-      }
-      onSuccess(successMessage);
+      await onSave(data);
+      onClose();
     } catch (error) {
-      console.error('Error saving status:', error);
-      toast({ title: 'Erro', description: 'Ocorreu um erro ao salvar o status.', variant: 'destructive' });
+      // O erro já é tratado na página principal
     } finally {
       setLoading(false);
-      onClose();
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>{status ? 'Editar Status' : 'Adicionar Novo Status'}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Coluna da Esquerda */}
               <div className="space-y-4">

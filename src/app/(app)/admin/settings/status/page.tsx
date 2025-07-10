@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, ReactNode } from 'react';
-import { collection, onSnapshot, orderBy, query, deleteDoc, doc } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { collection, onSnapshot, orderBy, query, deleteDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Status } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { MoreHorizontal, PlusCircle, Trash2, Edit } from 'lucide-react';
-import { StatusFormDialog } from '@/components/status-form-dialog';
+import { StatusFormDialog, StatusFormValues } from '@/components/status-form-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,6 +40,7 @@ export default function StatusSettingsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<Status | null>(null);
+  const [statusToDelete, setStatusToDelete] = useState<Status | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -51,43 +52,54 @@ export default function StatusSettingsPage() {
       });
       setStatuses(statusesData);
       setLoading(false);
+    }, (error) => {
+      console.error("Failed to fetch statuses:", error);
+      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const handleAddNew = () => {
-    setSelectedStatus(null);
+  const handleOpenDialog = (status: Status | null = null) => {
+    setSelectedStatus(status);
     setIsDialogOpen(true);
   };
 
-  const handleEdit = (status: Status) => {
-    setSelectedStatus(status);
-    setIsDialogOpen(true);
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false);
+    setSelectedStatus(null);
+  };
+
+  const handleSaveStatus = async (data: StatusFormValues) => {
+    try {
+      if (selectedStatus) {
+        const statusRef = doc(db, 'statuses', selectedStatus.id);
+        await updateDoc(statusRef, data);
+        toast({ title: 'Sucesso!', description: 'Status atualizado com sucesso.' });
+      } else {
+        await addDoc(collection(db, 'statuses'), data);
+        toast({ title: 'Sucesso!', description: 'Novo status criado com sucesso.' });
+      }
+    } catch (error) {
+      console.error('Error saving status:', error);
+      toast({ title: 'Erro', description: 'Ocorreu um erro ao salvar o status.', variant: 'destructive' });
+      throw error; // Propaga o erro para o modal saber que não deve fechar
+    }
   };
   
-  const handleDelete = (status: Status) => {
-    setSelectedStatus(status);
+  const handleDeleteClick = (status: Status) => {
+    setStatusToDelete(status);
     setIsDeleteDialogOpen(true);
   };
 
-  const handleSuccess = (message: string) => {
-    toast({
-      title: 'Sucesso!',
-      description: message,
-    });
-  };
-
   const confirmDelete = async () => {
-    if (!selectedStatus) return;
+    if (!statusToDelete) return;
     try {
-      await deleteDoc(doc(db, 'statuses', selectedStatus.id));
+      await deleteDoc(doc(db, 'statuses', statusToDelete.id));
       toast({
         title: 'Sucesso!',
         description: 'Status excluído com sucesso.',
       });
-      setIsDeleteDialogOpen(false);
-      setSelectedStatus(null);
     } catch (error) {
       console.error('Error deleting status:', error);
       toast({
@@ -95,6 +107,9 @@ export default function StatusSettingsPage() {
         description: 'Ocorreu um erro ao excluir o status.',
         variant: 'destructive',
       });
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setStatusToDelete(null);
     }
   };
 
@@ -109,7 +124,7 @@ export default function StatusSettingsPage() {
           </p>
         </div>
         <div className="flex justify-end">
-          <Button onClick={handleAddNew}>
+          <Button onClick={() => handleOpenDialog()}>
             <PlusCircle className="mr-2 h-4 w-4" />
             Adicionar Status
           </Button>
@@ -167,11 +182,11 @@ export default function StatusSettingsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEdit(status)}>
+                          <DropdownMenuItem onClick={() => handleOpenDialog(status)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Editar
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDelete(status)} className="text-red-600">
+                          <DropdownMenuItem onClick={() => handleDeleteClick(status)} className="text-red-600">
                              <Trash2 className="mr-2 h-4 w-4" />
                             Excluir
                           </DropdownMenuItem>
@@ -194,12 +209,10 @@ export default function StatusSettingsPage() {
       
       {isDialogOpen && (
         <StatusFormDialog 
-          isOpen={isDialogOpen}
-          onClose={() => setIsDialogOpen(false)}
-          onSuccess={handleSuccess}
+          onClose={handleCloseDialog}
+          onSave={handleSaveStatus}
           status={selectedStatus}
           allStatuses={statuses}
-          currentStatus={selectedStatus}
         />
       )}
 
@@ -209,7 +222,7 @@ export default function StatusSettingsPage() {
             <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
             <AlertDialogDescription>
               Esta ação não pode ser desfeita. Isso excluirá permanentemente o status
-              "{selectedStatus?.name}".
+              "{statusToDelete?.name}".
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
