@@ -183,9 +183,11 @@ export default function StatusSettingsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onSelect={(e) => {
-                              e.preventDefault();
-                              setTimeout(() => handleOpenDialog(status), 0);
+                            onSelect={e => {
+                              e.preventDefault();            // evita que o menu tente fechar e abrir de novo
+                              setTimeout(() => {             // aguarda 0 ms → próximo tick
+                                handleOpenDialog(status);    // agora o menu já desmontou, layer foi limpo
+                              }, 0);
                             }}
                           >
                             <Edit className="mr-2 h-4 w-4" />
