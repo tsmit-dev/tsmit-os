@@ -4,13 +4,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Client } from '@/lib/types';
 import { getClients } from '@/lib/data';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, PlusCircle } from 'lucide-react';
 import { ClientsTable } from '@/components/clients-table';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/context/PermissionsContext';
 import { Input } from '@/components/ui/input';
 import { PageLayout } from '@/components/page-layout';
 import { Button } from '@/components/ui/button';
+import { ClientFormSheet } from '@/components/client-form-sheet';
 
 export default function ManageClientsPage() {
     const router = useRouter();
@@ -19,7 +20,6 @@ export default function ManageClientsPage() {
     const [loadingClients, setLoadingClients] = useState(true);
     const { hasPermission, loadingPermissions } = usePermissions();
     const [searchTerm, setSearchTerm] = useState('');
-    const [isAddClientDialogOpen, setAddClientDialogOpen] = useState(false);
 
     const canAccess = hasPermission('clients');
 
@@ -66,6 +66,15 @@ export default function ManageClientsPage() {
         />
     );
 
+    const actionButton = (
+        <ClientFormSheet onClientChange={fetchClients}>
+            <Button>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Adicionar Cliente
+            </Button>
+        </ClientFormSheet>
+    );
+
     return (
         <PageLayout
             title="Gerenciamento de Clientes"
@@ -74,6 +83,7 @@ export default function ManageClientsPage() {
             isLoading={loadingPermissions || loadingClients}
             canAccess={canAccess}
             searchBar={searchBar}
+            actionButton={actionButton}
         >
             <ClientsTable clients={filteredClients} onClientChange={fetchClients} />
         </PageLayout>
