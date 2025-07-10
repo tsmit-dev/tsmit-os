@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -24,18 +24,18 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { getStatusColorStyle } from '@/lib/status-colors';
+import { IconPicker, iconList, isIconName, IconName } from '@/components/icon-picker';
 import { Status } from '@/lib/types';
-import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { ScrollArea } from './ui/scroll-area';
-import { Badge } from './ui/badge';
-import { getStatusColorStyle } from '../lib/status-colors';
-import { IconPicker, iconList, isIconName, IconName } from './icon-picker';
 
 const statusFormSchema = z.object({
   name: z.string().min(3, { message: 'O nome deve ter pelo menos 3 caracteres.' }),
   order: z.coerce.number().int().positive({ message: 'A ordem deve ser um número positivo.' }),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, { message: 'Por favor, insira uma cor hexadecimal válida (ex: #RRGGBB).' }),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, { message: 'Por favor, insira uma cor hexadecimal válida (ex: #RRGGBB).' }),
   icon: z.enum(iconList).optional(),
   isInitial: z.boolean().default(false),
   triggersEmail: z.boolean().default(false),
@@ -48,63 +48,95 @@ const statusFormSchema = z.object({
 export type StatusFormValues = z.infer<typeof statusFormSchema>;
 
 interface StatusFormDialogProps {
-  onClose: () => void;
+  /** controla abertura/fechamento – vindo do componente pai */
+  open: boolean;
+  /** callback de mudança de estado do diálogo */
+  onOpenChange: (open: boolean) => void;
+  /** salva ou atualiza no Firestore */
   onSave: (data: StatusFormValues) => Promise<void>;
+  /** status escolhido para edição – `null` se for criação */
   status?: Status | null;
+  /** lista completa para montar checkboxes */
   allStatuses: Status[];
 }
 
-export function StatusFormDialog({ onClose, onSave, status, allStatuses }: StatusFormDialogProps) {
+export function StatusFormDialog({
+  open,
+  onOpenChange,
+  onSave,
+  status,
+  allStatuses,
+}: StatusFormDialogProps) {
   const [loading, setLoading] = useState(false);
 
+  /* formulário nasce com valores vazios;
+     o `useEffect` populará quando `status` chegar */
   const form = useForm<StatusFormValues>({
     resolver: zodResolver(statusFormSchema),
-    defaultValues: status 
-      ? {
-          ...status,
-          icon: isIconName(status.icon || "") ? (status.icon as IconName) : 'Package',
-        }
-      : {
-          name: '',
-          order: allStatuses.length > 0 ? Math.max(...allStatuses.map(s => s.order)) + 1 : 1,
-          color: '#808080',
-          icon: 'Package',
-          isInitial: false,
-          triggersEmail: false,
-          isPickupStatus: false,
-          isFinal: false,
-          allowedNextStatuses: [],
-          allowedPreviousStatuses: [],
-        },
+    defaultValues: {
+      name: '',
+      order: 1,
+      color: '#808080',
+      icon: 'Package',
+      isInitial: false,
+      triggersEmail: false,
+      isPickupStatus: false,
+      isFinal: false,
+      allowedNextStatuses: [],
+      allowedPreviousStatuses: [],
+    },
   });
 
-  const filteredStatuses = useMemo(() => {
-    return allStatuses.filter(s => s.id !== status?.id);
-  }, [allStatuses, status]);
+  /* quando mudar de “novo” para “editar”, repopula o form */
+  useEffect(() => {
+    if (!status) return;
 
+    form.reset({
+      name: status.name,
+      order: status.order,
+      color: status.color,
+      icon: isIconName(status.icon ?? '') ? (status.icon as IconName) : 'Package',
+      isInitial: status.isInitial ?? false,
+      triggersEmail: status.triggersEmail ?? false,
+      isPickupStatus: status.isPickupStatus ?? false,
+      isFinal: status.isFinal ?? false,
+      allowedNextStatuses: status.allowedNextStatuses ?? [],
+      allowedPreviousStatuses: status.allowedPreviousStatuses ?? [],
+    });
+    form.clearErrors();
+  }, [status, form]);
+
+  /* gera IDs para as listas sem incluir o próprio status */
+  const filteredStatuses = useMemo(
+    () => allStatuses.filter((s) => s.id !== status?.id),
+    [allStatuses, status],
+  );
+
+  /* submit */
   const handleSubmit = async (data: StatusFormValues) => {
     setLoading(true);
     try {
       await onSave(data);
-      onClose();
-    } catch (error) {
-      // O erro já é tratado na página principal
+      onOpenChange(false); // o pai fechará o diálogo
     } finally {
       setLoading(false);
     }
   };
 
+  /* UI */
   return (
-    <Dialog open={true} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>{status ? 'Editar Status' : 'Adicionar Novo Status'}</DialogTitle>
         </DialogHeader>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Coluna da Esquerda */}
+              {/* -------- coluna esquerda -------- */}
               <div className="space-y-4">
+                {/* Próximos status */}
                 <FormField
                   control={form.control}
                   name="allowedNextStatuses"
@@ -121,19 +153,21 @@ export function StatusFormDialog({ onClose, onSave, status, allStatuses }: Statu
                             control={form.control}
                             name="allowedNextStatuses"
                             render={({ field }) => (
-                              <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0 mb-3">
+                              <FormItem className="flex flex-row items-start space-x-3 mb-3">
                                 <FormControl>
                                   <Checkbox
                                     checked={field.value?.includes(item.id)}
-                                    onCheckedChange={(checked) => (
+                                    onCheckedChange={(checked) =>
                                       checked
                                         ? field.onChange([...(field.value || []), item.id])
-                                        : field.onChange(field.value?.filter((value) => value !== item.id))
-                                    )}
+                                        : field.onChange(field.value?.filter((v) => v !== item.id))
+                                    }
                                   />
                                 </FormControl>
                                 <FormLabel className="font-normal flex items-center gap-2">
-                                  <Badge variant="custom" style={getStatusColorStyle(item.color)}>{item.name}</Badge>
+                                  <Badge variant="custom" style={getStatusColorStyle(item.color)}>
+                                    {item.name}
+                                  </Badge>
                                 </FormLabel>
                               </FormItem>
                             )}
@@ -145,6 +179,7 @@ export function StatusFormDialog({ onClose, onSave, status, allStatuses }: Statu
                   )}
                 />
 
+                {/* Status anteriores */}
                 <FormField
                   control={form.control}
                   name="allowedPreviousStatuses"
@@ -161,19 +196,21 @@ export function StatusFormDialog({ onClose, onSave, status, allStatuses }: Statu
                             control={form.control}
                             name="allowedPreviousStatuses"
                             render={({ field }) => (
-                              <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0 mb-3">
+                              <FormItem className="flex flex-row items-start space-x-3 mb-3">
                                 <FormControl>
                                   <Checkbox
                                     checked={field.value?.includes(item.id)}
-                                    onCheckedChange={(checked) => (
+                                    onCheckedChange={(checked) =>
                                       checked
                                         ? field.onChange([...(field.value || []), item.id])
-                                        : field.onChange(field.value?.filter((value) => value !== item.id))
-                                    )}
+                                        : field.onChange(field.value?.filter((v) => v !== item.id))
+                                    }
                                   />
                                 </FormControl>
                                 <FormLabel className="font-normal flex items-center gap-2">
-                                  <Badge variant="custom" style={getStatusColorStyle(item.color)}>{item.name}</Badge>
+                                  <Badge variant="custom" style={getStatusColorStyle(item.color)}>
+                                    {item.name}
+                                  </Badge>
                                 </FormLabel>
                               </FormItem>
                             )}
@@ -186,7 +223,7 @@ export function StatusFormDialog({ onClose, onSave, status, allStatuses }: Statu
                 />
               </div>
 
-              {/* Coluna da Direita */}
+              {/* -------- coluna direita -------- */}
               <div className="space-y-4">
                 <FormField
                   control={form.control}
@@ -194,11 +231,14 @@ export function StatusFormDialog({ onClose, onSave, status, allStatuses }: Statu
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Nome do Status</FormLabel>
-                      <FormControl><Input placeholder="Ex: Em Análise" {...field} /></FormControl>
+                      <FormControl>
+                        <Input placeholder="Ex: Em Análise" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
                 <div className="grid grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
@@ -206,11 +246,14 @@ export function StatusFormDialog({ onClose, onSave, status, allStatuses }: Statu
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Ordem</FormLabel>
-                        <FormControl><Input type="number" placeholder="1" {...field} /></FormControl>
+                        <FormControl>
+                          <Input type="number" placeholder="1" {...field} />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={form.control}
                     name="color"
@@ -226,6 +269,7 @@ export function StatusFormDialog({ onClose, onSave, status, allStatuses }: Statu
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={form.control}
                     name="icon"
@@ -240,55 +284,45 @@ export function StatusFormDialog({ onClose, onSave, status, allStatuses }: Statu
                     )}
                   />
                 </div>
-                
+
+                {/* Flags booleanas */}
                 <div className="space-y-2">
-                  <FormField
-                    control={form.control}
-                    name="isInitial"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                        <div className="space-y-0.5"><FormLabel>Status Inicial</FormLabel><FormDescription>É o primeiro status de uma nova OS.</FormDescription></div>
-                        <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="triggersEmail"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                        <div className="space-y-0.5"><FormLabel>Dispara E-mail</FormLabel><FormDescription>Notifica o cliente por e-mail.</FormDescription></div>
-                        <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="isPickupStatus"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                        <div className="space-y-0.5"><FormLabel>Status de Retirada</FormLabel><FormDescription>Marca a OS como pronta para entrega.</FormDescription></div>
-                        <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="isFinal"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                        <div className="space-y-0.5"><FormLabel>Status Final</FormLabel><FormDescription>Marca a OS como finalizada.</FormDescription></div>
-                        <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                      </FormItem>
-                    )}
-                  />
+                  {([
+                    { name: 'isInitial', label: 'Status Inicial', desc: 'É o primeiro status de uma nova OS.' },
+                    { name: 'triggersEmail', label: 'Dispara E-mail', desc: 'Notifica o cliente por e-mail.' },
+                    { name: 'isPickupStatus', label: 'Status de Retirada', desc: 'Marca a OS como pronta para entrega.' },
+                    { name: 'isFinal', label: 'Status Final', desc: 'Marca a OS como finalizada.' },
+                  ] as const).map(({ name, label, desc }) => (
+                    <FormField
+                      key={name}
+                      control={form.control}
+                      name={name}
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                          <div className="space-y-0.5">
+                            <FormLabel>{label}</FormLabel>
+                            <FormDescription>{desc}</FormDescription>
+                          </div>
+                          <FormControl>
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  ))}
                 </div>
               </div>
             </div>
-            
+
             <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="outline" disabled={loading}>Cancelar</Button></DialogClose>
-              <Button type="submit" disabled={loading}>{loading ? 'Salvando...' : 'Salvar'}</Button>
+              <DialogClose asChild>
+                <Button type="button" variant="outline" disabled={loading}>
+                  Cancelar
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={loading}>
+                {loading ? 'Salvando...' : 'Salvar'}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

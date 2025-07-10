@@ -1,10 +1,19 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { collection, onSnapshot, orderBy, query, deleteDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { Status } from '@/lib/types';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState } from "react";
+import {
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  deleteDoc,
+  doc,
+  addDoc,
+  updateDoc,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Status } from "@/lib/types";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -12,15 +21,18 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, PlusCircle, Trash2, Edit } from 'lucide-react';
-import { StatusFormDialog, StatusFormValues } from '@/components/status-form-dialog';
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, PlusCircle, Trash2, Edit } from "lucide-react";
+import {
+  StatusFormDialog,
+  StatusFormValues,
+} from "@/components/status-form-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,63 +42,86 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
-import { renderIcon } from '@/components/icon-picker';
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { renderIcon } from "@/components/icon-picker";
 
 export default function StatusSettingsPage() {
+  /* --------------------------------------------------------------------- */
+  /* state                                                                */
+  /* --------------------------------------------------------------------- */
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<Status | null>(null);
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [statusToDelete, setStatusToDelete] = useState<Status | null>(null);
+
   const { toast } = useToast();
 
+  /* --------------------------------------------------------------------- */
+  /* firestore listener                                                    */
+  /* --------------------------------------------------------------------- */
   useEffect(() => {
-    const q = query(collection(db, 'statuses'), orderBy('order'));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const statusesData: Status[] = [];
-      querySnapshot.forEach((doc) => {
-        statusesData.push({ id: doc.id, ...doc.data() } as Status);
-      });
-      setStatuses(statusesData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Failed to fetch statuses:", error);
-      setLoading(false);
-    });
-
+    const q = query(collection(db, "statuses"), orderBy("order"));
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const data: Status[] = [];
+        querySnapshot.forEach((d) => data.push({ id: d.id, ...d.data() } as Status));
+        setStatuses(data);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Failed to fetch statuses:", error);
+        setLoading(false);
+      },
+    );
     return () => unsubscribe();
   }, []);
 
-  const handleOpenDialog = (status: Status | null = null) => {
-    setSelectedStatus(status);
-    setIsDialogOpen(true);
+  /* --------------------------------------------------------------------- */
+  /* dialog helpers                                                        */
+  /* --------------------------------------------------------------------- */
+  const openCreate = () => {
+    setSelectedStatus(null);
+    setDialogOpen(true);
   };
 
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false);
-    setSelectedStatus(null);
+  const openEdit = (status: Status) => {
+    // garante que o menu feche antes de abrir o modal
+    requestAnimationFrame(() => {
+      setSelectedStatus(status);
+      setDialogOpen(true);
+    });
   };
 
   const handleSaveStatus = async (data: StatusFormValues) => {
     try {
       if (selectedStatus) {
-        const statusRef = doc(db, 'statuses', selectedStatus.id);
+        const statusRef = doc(db, "statuses", selectedStatus.id);
         await updateDoc(statusRef, data);
-        toast({ title: 'Sucesso!', description: 'Status atualizado com sucesso.' });
+        toast({ title: "Sucesso!", description: "Status atualizado com sucesso." });
       } else {
-        await addDoc(collection(db, 'statuses'), data);
-        toast({ title: 'Sucesso!', description: 'Novo status criado com sucesso.' });
+        await addDoc(collection(db, "statuses"), data);
+        toast({ title: "Sucesso!", description: "Novo status criado com sucesso." });
       }
     } catch (error) {
-      console.error('Error saving status:', error);
-      toast({ title: 'Erro', description: 'Ocorreu um erro ao salvar o status.', variant: 'destructive' });
-      throw error;
+      console.error("Error saving status:", error);
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro ao salvar o status.",
+        variant: "destructive",
+      });
+      throw error; // deixa o modal aberto caso precise mostrar erro interno
     }
   };
-  
+
+  /* --------------------------------------------------------------------- */
+  /* delete helpers                                                        */
+  /* --------------------------------------------------------------------- */
   const handleDeleteClick = (status: Status) => {
     setStatusToDelete(status);
     setIsDeleteDialogOpen(true);
@@ -95,17 +130,14 @@ export default function StatusSettingsPage() {
   const confirmDelete = async () => {
     if (!statusToDelete) return;
     try {
-      await deleteDoc(doc(db, 'statuses', statusToDelete.id));
-      toast({
-        title: 'Sucesso!',
-        description: 'Status excluído com sucesso.',
-      });
+      await deleteDoc(doc(db, "statuses", statusToDelete.id));
+      toast({ title: "Sucesso!", description: "Status excluído com sucesso." });
     } catch (error) {
-      console.error('Error deleting status:', error);
+      console.error("Error deleting status:", error);
       toast({
-        title: 'Erro',
-        description: 'Ocorreu um erro ao excluir o status.',
-        variant: 'destructive',
+        title: "Erro",
+        description: "Ocorreu um erro ao excluir o status.",
+        variant: "destructive",
       });
     } finally {
       setIsDeleteDialogOpen(false);
@@ -113,9 +145,12 @@ export default function StatusSettingsPage() {
     }
   };
 
-
+  /* --------------------------------------------------------------------- */
+  /* render                                                                */
+  /* --------------------------------------------------------------------- */
   return (
     <>
+      {/* -------- header -------- */}
       <div className="space-y-6">
         <div>
           <h3 className="text-lg font-medium">Gerenciar Status</h3>
@@ -123,12 +158,15 @@ export default function StatusSettingsPage() {
             Crie, edite e organize os fluxos de status das Ordens de Serviço.
           </p>
         </div>
+
+        {/* botão adicionar */}
         <div className="flex justify-end">
-          <Button onClick={() => handleOpenDialog()}>
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Adicionar Status
+          <Button onClick={openCreate}>
+            <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Status
           </Button>
         </div>
+
+        {/* tabela */}
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -158,9 +196,9 @@ export default function StatusSettingsPage() {
                     <TableCell className="font-medium">{status.name}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center">
-                        <div 
-                          className="h-4 w-4 rounded-full border" 
-                          style={{ backgroundColor: status.color }} 
+                        <div
+                          className="h-4 w-4 rounded-full border"
+                          style={{ backgroundColor: status.color }}
                         />
                       </div>
                     </TableCell>
@@ -169,12 +207,12 @@ export default function StatusSettingsPage() {
                         {renderIcon(status.icon)}
                       </div>
                     </TableCell>
-                    <TableCell>{status.isPickupStatus ? 'Sim' : 'Não'}</TableCell>
-                    <TableCell>{status.isFinal ? 'Sim' : 'Não'}</TableCell>
-                    <TableCell>{status.isInitial ? 'Sim' : 'Não'}</TableCell>
-                    <TableCell>{status.triggersEmail ? 'Sim' : 'Não'}</TableCell>
+                    <TableCell>{status.isPickupStatus ? "Sim" : "Não"}</TableCell>
+                    <TableCell>{status.isFinal ? "Sim" : "Não"}</TableCell>
+                    <TableCell>{status.isInitial ? "Sim" : "Não"}</TableCell>
+                    <TableCell>{status.triggersEmail ? "Sim" : "Não"}</TableCell>
                     <TableCell className="text-right">
-                       <DropdownMenu>
+                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0">
                             <span className="sr-only">Abrir menu</span>
@@ -182,20 +220,14 @@ export default function StatusSettingsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onSelect={e => {
-                              e.preventDefault();            // evita que o menu tente fechar e abrir de novo
-                              setTimeout(() => {             // aguarda 0 ms → próximo tick
-                                handleOpenDialog(status);    // agora o menu já desmontou, layer foi limpo
-                              }, 0);
-                            }}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Editar
+                          <DropdownMenuItem onSelect={() => openEdit(status)}>
+                            <Edit className="mr-2 h-4 w-4" /> Editar
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDeleteClick(status)} className="text-red-600">
-                             <Trash2 className="mr-2 h-4 w-4" />
-                            Excluir
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteClick(status)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" /> Excluir
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -213,23 +245,23 @@ export default function StatusSettingsPage() {
           </Table>
         </div>
       </div>
-      
-      {isDialogOpen && (
-        <StatusFormDialog 
-          onClose={handleCloseDialog}
-          onSave={handleSaveStatus}
-          status={selectedStatus}
-          allStatuses={statuses}
-        />
-      )}
 
+      {/* -------- modal -------- */}
+      <StatusFormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSave={handleSaveStatus}
+        status={selectedStatus}
+        allStatuses={statuses}
+      />
+
+      {/* -------- confirmação de exclusão -------- */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. Isso excluirá permanentemente o status
-              "{statusToDelete?.name}".
+              Esta ação não pode ser desfeita. Isso excluirá permanentemente o status "{statusToDelete?.name}".
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
