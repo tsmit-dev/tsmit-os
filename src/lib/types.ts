@@ -52,6 +52,7 @@ export interface Status {
   allowedNextStatuses?: string[];
   allowedPreviousStatuses?: string[]; // New field
   isPickupStatus?: boolean;
+  isFinal?: boolean;
 }
 
 

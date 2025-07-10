@@ -39,6 +39,7 @@ const statusFormSchema = z.object({
   isInitial: z.boolean().default(false),
   triggersEmail: z.boolean().default(false),
   isPickupStatus: z.boolean().default(false),
+  isFinal: z.boolean().default(false),
   allowedNextStatuses: z.array(z.string()).default([]),
   allowedPreviousStatuses: z.array(z.string()).default([]),
 });
@@ -79,6 +80,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
       isInitial: false,
       triggersEmail: false,
       isPickupStatus: false,
+      isFinal: false,
       allowedNextStatuses: [],
       allowedPreviousStatuses: [],
     },
@@ -94,6 +96,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
           isInitial: status.isInitial ?? false,
           triggersEmail: status.triggersEmail ?? false,
           isPickupStatus: status.isPickupStatus ?? false,
+          isFinal: status.isFinal ?? false,
           allowedNextStatuses: status.allowedNextStatuses ?? [],
           allowedPreviousStatuses: status.allowedPreviousStatuses ?? [],
         });
@@ -108,6 +111,7 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
           isInitial: false,
           triggersEmail: false,
           isPickupStatus: false,
+          isFinal: false,
           allowedNextStatuses: [],
           allowedPreviousStatuses: [],
         });
@@ -300,6 +304,16 @@ export function StatusFormDialog({ isOpen, onClose, status, allStatuses, current
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                      <div className="space-y-0.5"><FormLabel>Status de Retirada</FormLabel><FormDescription>Marca a OS como pronta para entrega.</FormDescription></div>
+                    <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="isFinal"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                    <div className="space-y-0.5"><FormLabel>Status Final</FormLabel><FormDescription>Marca a OS como finalizada.</FormDescription></div>
                     <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
                 )}

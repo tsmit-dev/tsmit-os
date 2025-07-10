@@ -113,7 +113,8 @@ export default function StatusSettingsPage() {
                 <TableHead className="w-[80px]">Ordem</TableHead>
                 <TableHead>Nome do Status</TableHead>
                 <TableHead className="w-[80px]">Cor</TableHead>
-                <TableHead>P/ Retirada?</TableHead>
+                <TableHead>Pronto p/ Retirada?</TableHead>
+                <TableHead>Status Final?</TableHead>
                 <TableHead>Status Inicial?</TableHead>
                 <TableHead>Dispara Email?</TableHead>
                 <TableHead className="w-[80px] text-right">Ações</TableHead>
@@ -140,6 +141,7 @@ export default function StatusSettingsPage() {
                       </div>
                     </TableCell>
                     <TableCell>{status.isPickupStatus ? 'Sim' : 'Não'}</TableCell>
+                    <TableCell>{status.isFinal ? 'Sim' : 'Não'}</TableCell>
                     <TableCell>{status.isInitial ? 'Sim' : 'Não'}</TableCell>
                     <TableCell>{status.triggersEmail ? 'Sim' : 'Não'}</TableCell>
                     <TableCell className="text-right">
