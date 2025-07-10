@@ -62,7 +62,7 @@ export function StatusFormDialog({ onClose, onSave, status, allStatuses }: Statu
     defaultValues: status 
       ? {
           ...status,
-          icon: isIconName(status.icon || "") ? status.icon : 'Package',
+          icon: isIconName(status.icon || "") ? (status.icon as IconName) : 'Package',
         }
       : {
           name: '',
