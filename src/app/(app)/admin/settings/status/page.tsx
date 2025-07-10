@@ -83,7 +83,7 @@ export default function StatusSettingsPage() {
     } catch (error) {
       console.error('Error saving status:', error);
       toast({ title: 'Erro', description: 'Ocorreu um erro ao salvar o status.', variant: 'destructive' });
-      throw error; // Propaga o erro para o modal saber que não deve fechar
+      throw error;
     }
   };
   
@@ -182,7 +182,12 @@ export default function StatusSettingsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleOpenDialog(status)}>
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              setTimeout(() => handleOpenDialog(status), 0);
+                            }}
+                          >
                             <Edit className="mr-2 h-4 w-4" />
                             Editar
                           </DropdownMenuItem>
