@@ -78,7 +78,11 @@ const RoleForm: React.FC<RoleFormProps> = ({ role, onSave, onClose }) => {
           toast({ title: "Sucesso", description: "Cargo atualizado." });
           onSave(updated);
         } else {
-          throw new Error("Falha ao atualizar o cargo.");
+          toast({
+            title: "Erro",
+            description: "Falha ao atualizar o cargo.",
+            variant: "destructive",
+          });
         }
       } else {
         const created = await addRole({ name, permissions });
@@ -86,9 +90,13 @@ const RoleForm: React.FC<RoleFormProps> = ({ role, onSave, onClose }) => {
           toast({ title: "Sucesso", description: "Cargo criado." });
           onSave(created);
         } else {
-          throw new Error("Falha ao criar o cargo.");
-        }
+          toast({
+            title: "Erro",
+            description: "Falha ao criar o cargo.",
+            variant: "destructive",
+          });
       }
+    }
       onClose();
     } catch (err: any) {
       toast({
@@ -151,19 +159,19 @@ export default function RolesPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingRole, setEditingRole] = useState<Role | undefined>();
+  const [editingRole, setEditingRole] = useState<Role>();
 
   // common loading container
   const baseLoadingClasses =
     "space-y-4 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10";
 
-  // ensure permission or redirect
+  // permission check & initial load
   useEffect(() => {
     if (!loadingPermissions) {
       if (!hasPermission("adminSettings")) {
         toast({
           title: "Acesso Negado",
-          description: "Permissão insuficiente.",
+          description: "Você não tem permissão para acessar esta página.",
           variant: "destructive",
         });
         router.replace("/dashboard");
@@ -181,7 +189,7 @@ export default function RolesPage() {
     } catch (err: any) {
       toast({
         title: "Erro",
-        description: `Falha ao carregar: ${err.message}`,
+        description: `Falha ao carregar cargos: ${err.message}`,
         variant: "destructive",
       });
     } finally {
@@ -231,15 +239,17 @@ export default function RolesPage() {
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-      {/* title */}
-      <div>
-        <h2 className="text-2xl font-bold">Gerenciamento de Cargos</h2>
+      {/* Title */}
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl sm:text-3xl font-bold font-headline">
+          Gerenciamento de Cargos
+        </h1>
         <p className="text-sm text-muted-foreground">
           Gerencie os cargos e suas permissões no sistema.
         </p>
       </div>
 
-      {/* search under title */}
+      {/* Search bar under title */}
       <div>
         <Input
           placeholder="Buscar cargos por nome..."
@@ -249,113 +259,114 @@ export default function RolesPage() {
         />
       </div>
 
-      {/* new role button + dialog */}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <div className="flex justify-end">
+      {/* New role button */}
+      <div className="flex justify-end">
+        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => setIsFormOpen(true)}>
+            <Button
+              onClick={() => {
+                setEditingRole(undefined);
+                setIsFormOpen(true);
+              }}
+            >
               <PlusCircle className="mr-2 h-4 w-4" /> Novo Cargo
             </Button>
           </DialogTrigger>
-        </div>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>
-              {editingRole ? "Editar Cargo" : "Adicionar Novo Cargo"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingRole
-                ? "Ajuste as permissões do cargo."
-                : "Defina nome e permissões para o novo cargo."}
-            </DialogDescription>
-          </DialogHeader>
-          <RoleForm
-            role={editingRole}
-            onSave={(r) => {
-              handleSave(r);
-              fetchRoles();
-            }}
-            onClose={() => {
-              setIsFormOpen(false);
-              setEditingRole(undefined);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>
+                {editingRole ? "Editar Cargo" : "Adicionar Novo Cargo"}
+              </DialogTitle>
+              <DialogDescription>
+                {editingRole
+                  ? "Faça as alterações no cargo aqui."
+                  : "Crie um novo cargo e defina suas permissões."}
+              </DialogDescription>
+            </DialogHeader>
+            <RoleForm
+              role={editingRole}
+              onSave={(r) => {
+                handleSave(r);
+                fetchRoles();
+              }}
+              onClose={() => {
+                setIsFormOpen(false);
+                setEditingRole(undefined);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      </div>
 
-      {/* roles table */}
+      {/* Table */}
       <div className="overflow-x-auto bg-white rounded-lg shadow-sm">
-        <Card>
-          <CardHeader>
-            <CardTitle>Cargos</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome</TableHead>
+              <TableHead>Permissões</TableHead>
+              <TableHead className="text-right">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {loading ? (
-              <div className="p-4">Carregando cargos...</div>
+              <TableRow>
+                <TableCell colSpan={3} className="text-center py-4">
+                  Carregando cargos...
+                </TableCell>
+              </TableRow>
             ) : filtered.length === 0 ? (
-              <div className="p-4">Nenhum cargo encontrado.</div>
+              <TableRow>
+                <TableCell colSpan={3} className="text-center py-4">
+                  Nenhum cargo encontrado.
+                </TableCell>
+              </TableRow>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Permissões</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((role) => (
-                    <TableRow key={role.id}>
-                      <TableCell className="font-medium">
-                        {role.name}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          {Object.entries(role.permissions).map(
-                            ([key, allowed]) => {
-                              if (!allowed) return null;
-                              const label = key
+              filtered.map((role) => (
+                <TableRow key={role.id}>
+                  <TableCell className="font-medium">{role.name}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(role.permissions).map(
+                        ([key, allowed]) =>
+                          allowed && (
+                            <span
+                              key={key}
+                              className="inline-flex items-center rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
+                            >
+                              {key
                                 .replace(/([A-Z])/g, " $1")
-                                .replace(/^./, (s) => s.toUpperCase());
-                              return (
-                                <span
-                                  key={key}
-                                  className="inline-flex items-center rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
-                                >
-                                  {label}
-                                </span>
-                              );
-                            }
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="mr-2"
-                          onClick={() => {
-                            setEditingRole(role);
-                            setIsFormOpen(true);
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(role.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                                .replace(/^./, (s) => s.toUpperCase())}
+                            </span>
+                          )
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mr-2"
+                      onClick={() => {
+                        setEditingRole(role);
+                        setIsFormOpen(true);
+                      }}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(role.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
             )}
-          </CardContent>
-        </Card>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
