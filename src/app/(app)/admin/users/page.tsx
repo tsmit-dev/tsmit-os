@@ -62,9 +62,7 @@ export default function ManageUsersPage() {
   const filteredUsers = users.filter((user) =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.role?.name ?? "")
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase())
+    (user.role?.name ?? "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Common classes for loading/fallback states
@@ -97,19 +95,21 @@ export default function ManageUsersPage() {
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-      {/* Header + Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <UsersIcon className="w-8 h-8 text-primary" />
-          <h1 className="text-2xl sm:text-3xl font-bold font-headline">
-            Gerenciamento de Usuários
-          </h1>
-        </div>
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <UsersIcon className="w-8 h-8 text-primary" />
+        <h1 className="text-2xl sm:text-3xl font-bold font-headline">
+          Gerenciamento de Usuários
+        </h1>
+      </div>
+
+      {/* Search bar under title */}
+      <div>
         <Input
           placeholder="Buscar por nome, e-mail ou cargo..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full sm:w-auto sm:flex-none"
+          className="w-full sm:w-1/2"
         />
       </div>
 
