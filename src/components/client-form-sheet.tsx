@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, Pencil, Loader2 } from "lucide-react";
 
 const formSchema = z.object({
@@ -91,13 +92,12 @@ export function ClientFormSheet({ client, onClientChange, children }: ClientForm
         contractedServiceIds: [],
       });
     }
-  }, [client, form]);
+  }, [client, form, isOpen]);
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (!open) {
         form.clearErrors();
-        form.reset();
     }
   }
 
@@ -120,7 +120,7 @@ export function ClientFormSheet({ client, onClientChange, children }: ClientForm
   return (
     <Sheet open={isOpen} onOpenChange={handleOpenChange}>
       <SheetTrigger asChild>{children}</SheetTrigger>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent className="flex flex-col">
         <SheetHeader>
           <SheetTitle>{client ? "Editar Cliente" : "Criar Novo Cliente"}</SheetTitle>
           <SheetDescription>
@@ -128,58 +128,64 @@ export function ClientFormSheet({ client, onClientChange, children }: ClientForm
           </SheetDescription>
         </SheetHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-6">
-            <FormField control={form.control} name="name" render={({ field }) => (
-              <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="email" render={({ field }) => (
-              <FormItem><FormLabel>Email (Opcional)</FormLabel><FormControl><Input {...field} placeholder="email@cliente.com" /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="cnpj" render={({ field }) => (
-              <FormItem><FormLabel>CNPJ (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="address" render={({ field }) => (
-              <FormItem><FormLabel>Endereço (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            
-            <FormField
-              control={form.control}
-              name="contractedServiceIds"
-              render={() => (
-                <FormItem>
-                  <div className="mb-4">
-                    <FormLabel className="text-base">Serviços Contratados</FormLabel>
-                    <FormDescription>Selecione os serviços que este cliente possui.</FormDescription>
-                  </div>
-                  {loadingServices ? <Loader2 className="animate-spin" /> :
-                    providedServices.map((service) => (
-                      <FormField
-                        key={service.id}
-                        control={form.control}
-                        name="contractedServiceIds"
-                        render={({ field }) => (
-                          <FormItem key={service.id} className="flex flex-row items-start space-x-3 space-y-0">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value?.includes(service.id)}
-                                onCheckedChange={(checked) => {
-                                  return checked
-                                    ? field.onChange([...(field.value || []), service.id])
-                                    : field.onChange(field.value?.filter((value) => value !== service.id))
-                                }}
-                              />
-                            </FormControl>
-                            <FormLabel className="font-normal">{service.name}</FormLabel>
-                          </FormItem>
-                        )}
-                      />
-                    ))}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <SheetFooter>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-grow">
+            <ScrollArea className="flex-grow pr-6">
+              <div className="space-y-6">
+                <FormField control={form.control} name="name" render={({ field }) => (
+                  <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="email" render={({ field }) => (
+                  <FormItem><FormLabel>Email (Opcional)</FormLabel><FormControl><Input {...field} placeholder="email@cliente.com" /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="cnpj" render={({ field }) => (
+                  <FormItem><FormLabel>CNPJ (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="address" render={({ field }) => (
+                  <FormItem><FormLabel>Endereço (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                
+                <FormField
+                  control={form.control}
+                  name="contractedServiceIds"
+                  render={() => (
+                    <FormItem>
+                      <div className="mb-4">
+                        <FormLabel className="text-base">Serviços Contratados</FormLabel>
+                        <FormDescription>Selecione os serviços que este cliente possui.</FormDescription>
+                      </div>
+                      {loadingServices ? <Loader2 className="animate-spin" /> :
+                        <div className="space-y-2">
+                        {providedServices.map((service) => (
+                          <FormField
+                            key={service.id}
+                            control={form.control}
+                            name="contractedServiceIds"
+                            render={({ field }) => (
+                              <FormItem key={service.id} className="flex flex-row items-start space-x-3 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(service.id)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), service.id])
+                                        : field.onChange(field.value?.filter((value) => value !== service.id))
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal">{service.name}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                        </div>
+                      }
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </ScrollArea>
+            <SheetFooter className="mt-auto pt-6">
               <SheetClose asChild><Button type="button" variant="ghost">Cancelar</Button></SheetClose>
               <Button type="submit" disabled={form.formState.isSubmitting}>
                 {form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Salvar"}

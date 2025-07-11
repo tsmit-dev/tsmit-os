@@ -25,7 +25,7 @@ import { Client } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePermissions } from "@/context/PermissionsContext";
 import { useAuth } from "@/components/auth-provider";
-import { useStatuses } from "@/hooks/use-statuses"; // 1. Import useStatuses
+import { useStatuses } from "@/hooks/use-statuses";
 
 const formSchema = z.object({
   clientId: z.string({ required_error: "Selecione um cliente." }),
@@ -42,7 +42,7 @@ const formSchema = z.object({
 export default function NewOsPage() {
     const { hasPermission, loadingPermissions } = usePermissions();
     const { user } = useAuth();
-    const { statuses, loading: loadingStatuses } = useStatuses(); // 2. Use the hook
+    const { statuses, loading: loadingStatuses } = useStatuses();
     const router = useRouter();
     const { toast } = useToast();
     const [clients, setClients] = useState<Client[]>([]);
@@ -87,23 +87,17 @@ export default function NewOsPage() {
     }, [loadingPermissions, hasPermission, toast]);
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
-        if (!user) {
-            toast({ title: "Erro de autenticação", description: "Usuário não encontrado.", variant: "destructive" });
-            return;
-        }
-        if (!hasPermission('os')) {
-             toast({ title: "Acesso Negado", description: "Você não tem permissão para criar novas OS.", variant: "destructive" });
+        if (!user || !hasPermission('os')) {
+            toast({ title: "Acesso Negado", variant: "destructive" });
             return;
         }
 
-        // 3. Find the initial status
         const initialStatus = statuses.find(s => s.isInitial);
         if (!initialStatus) {
             toast({
                 title: "Configuração Necessária",
-                description: "Nenhum status inicial foi definido. Por favor, configure um status como inicial na área de administração.",
+                description: "Nenhum status inicial foi definido.",
                 variant: "destructive",
-                duration: 7000,
             });
             return;
         }
@@ -124,114 +118,113 @@ export default function NewOsPage() {
                 },
                 reportedProblem: values.problem,
                 analyst: user.name,
-                statusId: initialStatus.id, // 4. Pass the initial status ID
+                statusId: initialStatus.id,
             });
             toast({
                 title: "Sucesso!",
-                description: `OS ${newOrder.id} criada com o status "${initialStatus.name}".`,
-                variant: "default",
+                description: `OS ${newOrder.id} criada.`,
             });
             router.push(`/os/${newOrder.id}`);
         } catch (error) {
-             console.error("Erro ao criar OS:", error);
              toast({
                 title: "Erro",
-                description: `Não foi possível criar a OS: ${(error as Error).message || "Erro desconhecido"}`,
+                description: "Não foi possível criar a OS.",
                 variant: "destructive",
             });
         }
     }
     
     if (loadingPermissions || loadingClients || loadingStatuses) {
-        return (
-            <div className="container mx-auto space-y-4 p-4 sm:p-6 lg:p-8">
-                <div className="flex items-center gap-4 mb-6">
-                    <Skeleton className="h-8 w-8" />
-                    <Skeleton className="h-10 w-1/2" />
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <Skeleton className="h-[350px] w-full" />
-                    <Skeleton className="h-[350px] w-full" />
-                </div>
-                <Skeleton className="h-48 w-full" />
-            </div>
-        );
+        return <NewOsSkeleton />;
     }
 
   return (
-    <div className="container mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-            <PlusCircle className="w-8 h-8 text-primary" />
-            <h1 className="text-3xl font-bold font-headline">Criar Nova Ordem de Serviço</h1>
+    <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-4">
+            <PlusCircle className="w-6 h-6 text-primary" />
+            <h1 className="text-2xl font-bold font-headline">Nova Ordem de Serviço</h1>
         </div>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card>
+                        <CardHeader><CardTitle>Cliente e Contato</CardTitle></CardHeader>
+                        <CardContent className="space-y-4">
+                             <FormField control={form.control} name="clientId" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Empresa / Cliente</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione um cliente" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            {clients.map(client => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                             )} />
+                             <FormField control={form.control} name="collaboratorName" render={({ field }) => (
+                                <FormItem><FormLabel>Nome do Contato</FormLabel><FormControl><Input placeholder="Nome do responsável" {...field} /></FormControl><FormMessage /></FormItem>
+                             )} />
+                             <FormField control={form.control} name="collaboratorEmail" render={({ field }) => (
+                                <FormItem><FormLabel>Email do Contato</FormLabel><FormControl><Input placeholder="email@exemplo.com" {...field} /></FormControl><FormMessage /></FormItem>
+                             )} />
+                             <FormField control={form.control} name="collaboratorPhone" render={({ field }) => (
+                                <FormItem><FormLabel>Telefone do Contato</FormLabel><FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>
+                             )} />
+                        </CardContent>
+                    </Card>
+                     <Card>
+                        <CardHeader><CardTitle>Equipamento</CardTitle></CardHeader>
+                        <CardContent className="space-y-4">
+                             <FormField control={form.control} name="equipType" render={({ field }) => (
+                                <FormItem><FormLabel>Tipo</FormLabel><FormControl><Input placeholder="Notebook, Desktop..." {...field} /></FormControl><FormMessage /></FormItem>
+                             )} />
+                             <FormField control={form.control} name="equipBrand" render={({ field }) => (
+                                <FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="Dell, HP..." {...field} /></FormControl><FormMessage /></FormItem>
+                             )} />
+                             <FormField control={form.control} name="equipModel" render={({ field }) => (
+                                <FormItem><FormLabel>Modelo</FormLabel><FormControl><Input placeholder="Latitude 7490..." {...field} /></FormControl><FormMessage /></FormItem>
+                             )} />
+                             <FormField control={form.control} name="equipSerial" render={({ field }) => (
+                                <FormItem><FormLabel>Número de Série</FormLabel><FormControl><Input placeholder="S/N" {...field} /></FormControl><FormMessage /></FormItem>
+                             )} />
+                        </CardContent>
+                    </Card>
+                </div>
                 <Card>
-                    <CardHeader><CardTitle>Informações do Cliente e Contato</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                         <FormField control={form.control} name="clientId" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Empresa / Cliente</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione um cliente" /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        {clients.map(client => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
-                         )} />
-                         <FormField control={form.control} name="collaboratorName" render={({ field }) => (
-                            <FormItem><FormLabel>Nome do Contato</FormLabel><FormControl><Input placeholder="Nome de quem trouxe o equipamento" {...field} /></FormControl><FormMessage /></FormItem>
-                         )} />
-                         <FormField control={form.control} name="collaboratorEmail" render={({ field }) => (
-                            <FormItem><FormLabel>Email do Contato</FormLabel><FormControl><Input placeholder="email.contato@cliente.com" {...field} /></FormControl><FormMessage /></FormItem>
-                         )} />
-                         <FormField control={form.control} name="collaboratorPhone" render={({ field }) => (
-                            <FormItem><FormLabel>Telefone do Contato</FormLabel><FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>
-                         )} />
+                    <CardHeader>
+                        <CardTitle>Detalhes do Problema</CardTitle>
+                        <CardDescription>Descreva o problema relatado. O analista responsável será você ({user?.name}).</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <FormField control={form.control} name="problem" render={({ field }) => (
+                            <FormItem><FormLabel>Problema Relatado</FormLabel><FormControl><Textarea rows={5} placeholder="Descreva em detalhes o problema..." {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
                     </CardContent>
                 </Card>
-                 <Card>
-                    <CardHeader><CardTitle>Informações do Equipamento</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                         <FormField control={form.control} name="equipType" render={({ field }) => (
-                            <FormItem><FormLabel>Tipo</FormLabel><FormControl><Input placeholder="Notebook, Desktop, Impressora..." {...field} /></FormControl><FormMessage /></FormItem>
-                         )} />
-                         <FormField control={form.control} name="equipBrand" render={({ field }) => (
-                            <FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="Dell, HP, Apple..." {...field} /></FormControl><FormMessage /></FormItem>
-                         )} />
-                         <FormField control={form.control} name="equipModel" render={({ field }) => (
-                            <FormItem><FormLabel>Modelo</FormLabel><FormControl><Input placeholder="Latitude 7490, MacBook Pro 14..." {...field} /></FormControl><FormMessage /></FormItem>
-                         )} />
-                         <FormField control={form.control} name="equipSerial" render={({ field }) => (
-                            <FormItem><FormLabel>Número de Série</FormLabel><FormControl><Input placeholder="S/N" {...field} /></FormControl><FormMessage /></FormItem>
-                         )} />
-                    </CardContent>
-                </Card>
-            </div>
-            <Card>
-                <CardHeader>
-                    <CardTitle>Detalhes do Problema</CardTitle>
-                    <CardDescription>Descreva o problema relatado. O analista responsável será você.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <FormField control={form.control} name="problem" render={({ field }) => (
-                        <FormItem><FormLabel>Problema Relatado</FormLabel><FormControl><Textarea rows={5} placeholder="Descreva em detalhes o problema..." {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                     <div className="text-sm text-muted-foreground">
-                        <p>Analista Responsável: <span className="font-medium text-foreground">{user?.name}</span></p>
-                    </div>
-                </CardContent>
-            </Card>
-          <div className="flex justify-end">
-            <Button type="submit" size="lg" disabled={form.formState.isSubmitting || !hasPermission('os')}>
-                {form.formState.isSubmitting ? "Salvando..." : "Criar OS"}
-            </Button>
-          </div>
-        </form>
-      </Form>
+                <div className="flex justify-end">
+                    <Button type="submit" className="w-full sm:w-auto" disabled={form.formState.isSubmitting || !hasPermission('os')}>
+                        {form.formState.isSubmitting ? "Salvando..." : "Criar OS"}
+                    </Button>
+                </div>
+            </form>
+        </Form>
     </div>
   );
+}
+
+function NewOsSkeleton() {
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center gap-4">
+                <Skeleton className="h-8 w-8" />
+                <Skeleton className="h-10 w-1/2" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Skeleton className="h-[350px] w-full" />
+                <Skeleton className="h-[350px] w-full" />
+            </div>
+            <Skeleton className="h-48 w-full" />
+        </div>
+    );
 }

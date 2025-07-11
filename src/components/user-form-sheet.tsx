@@ -12,6 +12,8 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
+  SheetFooter,
+  SheetClose,
 } from "@/components/ui/sheet";
 import {
   Form,
@@ -33,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Pencil, Plus } from "lucide-react";
 import { registerUser } from "@/lib/data";
+import { ScrollArea } from "./ui/scroll-area";
 
 const userSchema = z.object({
     name: z.string().min(1, "O nome é obrigatório."),
@@ -110,102 +113,106 @@ export function UserFormSheet({
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>{children}</SheetTrigger>
-      <SheetContent>
+      <SheetContent className="flex flex-col">
         <SheetHeader>
           <SheetTitle>{user ? "Editar Usuário" : "Adicionar Usuário"}</SheetTitle>
         </SheetHeader>
-        <div className="mt-4">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nome do usuário" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>E-mail</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="E-mail do usuário"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              {!user && (
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Senha</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          placeholder="Senha"
-                          {...field}
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-grow">
+                <ScrollArea className="flex-grow pr-6">
+                    <div className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="name"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Nome</FormLabel>
+                                <FormControl>
+                                <Input placeholder="Nome do usuário" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
                         />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-              <FormField
-                control={form.control}
-                name="roleId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cargo</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um cargo" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {roles.map((role) => (
-                          <SelectItem key={role.id} value={role.id}>
-                            {role.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsOpen(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button type="submit">Salvar</Button>
-              </div>
+                        <FormField
+                            control={form.control}
+                            name="email"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>E-mail</FormLabel>
+                                <FormControl>
+                                <Input
+                                    type="email"
+                                    placeholder="E-mail do usuário"
+                                    {...field}
+                                />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        {!user && (
+                            <FormField
+                            control={form.control}
+                            name="password"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>Senha</FormLabel>
+                                <FormControl>
+                                    <Input
+                                    type="password"
+                                    placeholder="Senha"
+                                    {...field}
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                            />
+                        )}
+                        <FormField
+                            control={form.control}
+                            name="roleId"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Cargo</FormLabel>
+                                <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                >
+                                <FormControl>
+                                    <SelectTrigger>
+                                    <SelectValue placeholder="Selecione um cargo" />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    {roles.map((role) => (
+                                    <SelectItem key={role.id} value={role.id}>
+                                        {role.name}
+                                    </SelectItem>
+                                    ))}
+                                </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                    </div>
+                </ScrollArea>
+                <SheetFooter className="mt-auto pt-6">
+                    <SheetClose asChild>
+                        <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsOpen(false)}
+                        >
+                        Cancelar
+                        </Button>
+                    </SheetClose>
+                    <Button type="submit">Salvar</Button>
+                </SheetFooter>
             </form>
           </Form>
-        </div>
       </SheetContent>
     </Sheet>
   );

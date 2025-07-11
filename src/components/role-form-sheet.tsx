@@ -6,13 +6,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Role, Permissions, PERMISSION_KEYS, PERMISSION_LABELS, PermissionKey } from '@/lib/types';
 import { addRole, updateRole } from '@/lib/data';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Pencil, Plus } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from './ui/scroll-area';
 
 const roleSchema = z.object({
   name: z.string().min(1, 'O nome é obrigatório.'),
@@ -66,67 +67,71 @@ export function RoleFormSheet({ children, role, onRoleChange }: RoleFormSheetPro
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>{children}</SheetTrigger>
-      <SheetContent>
+      <SheetContent className="flex flex-col">
         <SheetHeader>
           <SheetTitle>{role ? 'Editar Cargo' : 'Adicionar Cargo'}</SheetTitle>
         </SheetHeader>
-        <div className="mt-4">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nome do cargo" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="permissions"
-                render={() => (
-                    <FormItem>
-                        <FormLabel>Permissões</FormLabel>
-                        <div className="grid grid-cols-2 gap-4 mt-2">
-                        {PERMISSION_KEYS.map((key: PermissionKey) => (
-                            <Controller
-                            key={key}
-                            name={`permissions.${key}`}
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-grow">
+                <ScrollArea className="flex-grow pr-6">
+                    <div className="space-y-4">
+                        <FormField
                             control={form.control}
+                            name="name"
                             render={({ field }) => (
-                                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                            <FormItem>
+                                <FormLabel>Nome</FormLabel>
                                 <FormControl>
-                                    <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                    />
+                                <Input placeholder="Nome do cargo" {...field} />
                                 </FormControl>
-                                <div className="space-y-1 leading-none">
-                                    <FormLabel>{PERMISSION_LABELS[key]}</FormLabel>
-                                </div>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="permissions"
+                            render={() => (
+                                <FormItem>
+                                    <FormLabel>Permissões</FormLabel>
+                                    <div className="grid grid-cols-2 gap-4 mt-2">
+                                    {PERMISSION_KEYS.map((key: PermissionKey) => (
+                                        <Controller
+                                        key={key}
+                                        name={`permissions.${key}`}
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                            <FormControl>
+                                                <Checkbox
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                            <div className="space-y-1 leading-none">
+                                                <FormLabel>{PERMISSION_LABELS[key]}</FormLabel>
+                                            </div>
+                                            </FormItem>
+                                        )}
+                                        />
+                                    ))}
+                                    </div>
+                                    <FormMessage />
                                 </FormItem>
                             )}
-                            />
-                        ))}
-                        </div>
-                        <FormMessage />
-                    </FormItem>
-                )}
-               />
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit">Salvar</Button>
-              </div>
+                        />
+                    </div>
+                </ScrollArea>
+                <SheetFooter className="mt-auto pt-6">
+                    <SheetClose asChild>
+                        <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                        Cancelar
+                        </Button>
+                    </SheetClose>
+                    <Button type="submit">Salvar</Button>
+                </SheetFooter>
             </form>
           </Form>
-        </div>
       </SheetContent>
     </Sheet>
   );

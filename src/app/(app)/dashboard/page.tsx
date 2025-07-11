@@ -107,14 +107,15 @@ export default function DashboardPage() {
 
     if (loadingPermissions || loadingStatuses || !hasPermission('dashboard') || loadingStats) {
         return (
-            <div className="space-y-8 p-8 md:flex md:flex-col md:h-full">
-                <Skeleton className="h-10 w-[200px]" />
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {[...Array(6)].map((_, i) => (
-                        <Skeleton key={i} className="h-[120px] w-full" />
+            <div className="flex flex-col gap-4">
+                <Skeleton className="h-8 w-48" />
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {[...Array(4)].map((_, i) => (
+                        <Skeleton key={i} className="h-28 w-full" />
                     ))}
                 </div>
-                <Skeleton className="h-[300px] w-full" />
+                <Skeleton className="h-48 w-full" />
+                <Skeleton className="h-48 w-full" />
             </div>
         );
     }
@@ -138,11 +139,9 @@ export default function DashboardPage() {
 
 
     return (
-        <div className="flex-1 space-y-8 p-8 pt-6">
-            <div className="flex items-center justify-between space-y-2">
-                <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="flex flex-col gap-4">
+            <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total de OS Ativas</CardTitle>
@@ -151,7 +150,7 @@ export default function DashboardPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">{totalOrders}</div>
                         <p className="text-xs text-muted-foreground">
-                            Ordens de Serviço que não foram finalizadas
+                            Ordens de Serviço não finalizadas
                         </p>
                     </CardContent>
                 </Card>
@@ -165,45 +164,40 @@ export default function DashboardPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">{stat.count}</div>
-                            <p className="text-xs text-muted-foreground">
-                                Ordens de Serviço
-                            </p>
                         </CardContent>
                     </Card>
                 ))}
-                {analystCreatedStatsArray.length > 0 && (
-                    <Card className="md:col-span-2 lg:col-span-3 xl:col-span-4">
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+                 {analystCreatedStatsArray.length > 0 && (
+                    <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">OS por Analista - Criadas</CardTitle>
+                            <CardTitle className="text-sm font-medium">OS Criadas por Analista</CardTitle>
                             <Users className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {analystCreatedStatsArray.map((analystStat, index) => (
-                                    <div key={index} className="flex items-center justify-between p-2 border rounded-md">
-                                        <span className="text-sm font-medium">{analystStat.name}</span>
-                                        <span className="text-lg font-bold">{analystStat.count}</span>
-                                    </div>
-                                ))}
-                            </div>
+                        <CardContent className="space-y-2">
+                           {analystCreatedStatsArray.map((analystStat, index) => (
+                                <div key={index} className="flex items-center justify-between text-sm">
+                                    <span>{analystStat.name}</span>
+                                    <span className="font-bold">{analystStat.count}</span>
+                                </div>
+                            ))}
                         </CardContent>
                     </Card>
                 )}
                 {analystDeliveredStatsArray.length > 0 && (
-                    <Card className="md:col-span-2 lg:col-span-4">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">OS por Analista - Finalizadas</CardTitle>
+                    <Card>
+                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">OS Finalizadas por Analista</CardTitle>
                             <Users className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {analystDeliveredStatsArray.map((analystStat, index) => (
-                                    <div key={index} className="flex items-center justify-between p-2 border rounded-md">
-                                        <span className="text-sm font-medium">{analystStat.name}</span>
-                                        <span className="text-lg font-bold">{analystStat.count}</span>
-                                    </div>
-                                ))}
-                            </div>
+                         <CardContent className="space-y-2">
+                               {analystDeliveredStatsArray.map((analystStat, index) => (
+                                <div key={index} className="flex items-center justify-between text-sm">
+                                    <span>{analystStat.name}</span>
+                                    <span className="font-bold">{analystStat.count}</span>
+                                </div>
+                            ))}
                         </CardContent>
                     </Card>
                 )}
