@@ -1,47 +1,39 @@
+import type { Metadata } from 'next';
+import './globals.css';
+import { AuthProvider } from '@/components/auth-provider';
+import { Toaster } from "@/components/ui/toaster";
+import { PermissionsProvider } from '@/context/PermissionsContext'; // Importe o provider
 
-"use client";
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Skeleton } from '@/components/ui/skeleton';
-import { usePermissions } from '@/context/PermissionsContext';
-import { StatusesProvider } from '@/hooks/use-statuses';
-import { SidebarNav } from '@/components/sidebar-nav'; // Import the new SidebarNav
-
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const { userPermissions, loadingPermissions } = usePermissions();
-
-  useEffect(() => {
-    if (!loadingPermissions && userPermissions === null) {
-      router.replace('/');
-    }
-  }, [userPermissions, loadingPermissions, router]);
-
-  if (loadingPermissions || userPermissions === null) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Skeleton className="h-12 w-12 rounded-full" />
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-[250px]" />
-            <Skeleton className="h-4 w-[200px]" />
-          </div>
-          <p>Carregando sua sessão...</p>
-        </div>
-      </div>
-    );
+export const metadata: Metadata = {
+  title: 'TSMIT - Sistema de Controle de OS',
+  description: 'Sistema de Controle de Ordens de Serviço',
+  icons: {
+    icon: "/favicon.ico",
   }
+};
 
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <StatusesProvider>
-      <div className="grid min-h-screen w-full lg:grid-cols-[280px_1fr]">
-        <SidebarNav />
-        <div className="flex flex-col">
-          <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+    <html lang="en" className="h-full">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet" />
+        {/* Meta tag para responsividade */}
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      </head>
+      <body className="font-body antialiased h-full">
+        <AuthProvider>
+          <PermissionsProvider> {/* Envolva os children com o PermissionsProvider */}
             {children}
-          </main>
-        </div>
-      </div>
-    </StatusesProvider>
+            <Toaster />
+          </PermissionsProvider>
+        </AuthProvider>
+      </body>
+    </html>
   );
 }
