@@ -1,16 +1,8 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { ServiceOrder, Client, EmailSettings } from '@/lib/types';
-import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebaseAdmin'; 
 
-/**
- * Sends an email using the provided settings.
- * @param recipientEmail The email address of the recipient.
- * @param subject The subject line of the email.
- * @param htmlContent The HTML content of the email body.
- * @param emailSettings The email configuration settings from Firestore.
- */
 async function sendEmail(
   recipientEmail: string,
   subject: string,
@@ -23,15 +15,12 @@ async function sendEmail(
     throw new Error('Configurações de SMTP incompletas no banco de dados.');
   }
 
-  // Determine secure option based on SMTP_PORT and SMTP_SECURITY
-  // Nodemailer's 'secure' option: true for 465 (SMTPS), false for other ports (like 587 with STARTTLS)
-  const secureConnection = smtpPort === 465 || smtpSecurity === 'ssl' || smtpSecurity === 'ssltls';
-  // Nodemailer's 'requireTLS' option: true to enforce STARTTLS
-  const requireStartTLS = smtpPort === 587 && (smtpSecurity === 'starttls' || smtpSecurity === 'tls');
+  const secureConnection = smtpPort === 465 || smtpSecurity === 'ssl';
+  const requireStartTLS = !secureConnection;
 
   const transporter = nodemailer.createTransport({
     host: smtpServer,
-    port: smtpPort || 587, // Default to 587 if not specified
+    port: smtpPort || 587,
     secure: secureConnection,
     requireTLS: requireStartTLS,
     auth: {
@@ -39,8 +28,6 @@ async function sendEmail(
       pass: smtpPassword,
     },
     tls: {
-      // It's recommended to set rejectUnauthorized to true in production
-      // if you are using a valid certificate.
       rejectUnauthorized: false
     }
   });
@@ -55,64 +42,112 @@ async function sendEmail(
   await transporter.sendMail(mailOptions);
 }
 
-export async function POST(request: Request) {
-  try {
-    const { serviceOrder, client }: { serviceOrder: ServiceOrder; client: Client } = await request.json();
 
-    if (!serviceOrder || !client) {
-      return NextResponse.json({ message: 'Dados da ordem de serviço ou cliente ausentes.' }, { status: 400 });
+function generateEmailContent(order: ServiceOrder, statusName: string, clientName: string): { subject: string, htmlContent: string } {
+    const subject = `Atualização da OS ${order.orderNumber} - Status: ${statusName}`;
+
+    const commonStyle = "font-family: Arial, sans-serif; line-height: 1.6; color: #333;";
+    const headerStyle = "color: #0056b3;";
+    const strongStyle = "color: #0056b3;"; // Style for the new status name
+    const footerStyle = "font-size: 0.8em; color: #777;";
+    
+    let messageBody = '';
+
+    // Customize message based on the status
+    switch (statusName.toLowerCase()) {
+        case 'pronto para retirada':
+            messageBody = `
+                <p>Temos uma ótima notícia! Sua Ordem de Serviço <strong>${order.orderNumber}</strong> já está finalizada e disponível para retirada.</p>
+                <p><strong>Detalhes da Solução:</strong></p>
+                <p style="background-color: #f5f5f5; border-left: 4px solid #0056b3; padding: 10px; margin: 10px 0;">
+                    ${order.technicalSolution || 'Nenhuma solução técnica detalhada foi fornecida.'}
+                </p>
+                <p>Por favor, dirija-se à nossa recepção para retirar seu equipamento.</p>
+            `;
+            break;
+        case 'entregue':
+             messageBody = `
+                <p>Sua Ordem de Serviço <strong>${order.orderNumber}</strong> foi oficialmente marcada como <strong>ENTREGUE</strong>.</p>
+                <p>Agradecemos a sua confiança em nossos serviços e esperamos vê-lo novamente!</p>
+            `;
+            break;
+        default:
+             messageBody = `
+                <p>Sua Ordem de Serviço <strong>${order.orderNumber}</strong> teve seu status atualizado para: <strong style="${strongStyle}">${statusName.toUpperCase()}</strong>.</p>
+                <p>Acesse nosso portal para mais detalhes.</p>
+             `;
     }
 
-    // Determine the recipient email, prioritizing client email
-    const recipientEmail = client.email || serviceOrder.collaborator.email;
-
-    if (!recipientEmail) {
-      return NextResponse.json({ message: 'Nenhum e-mail de destinatário válido fornecido para o cliente ou colaborador.' }, { status: 400 });
-    }
-
-    // Fetch email settings from Firestore
-    const settingsDocRef = doc(db, 'settings', 'email');
-    const settingsSnap = await getDoc(settingsDocRef);
-
-    if (!settingsSnap.exists()) {
-      return NextResponse.json({ message: 'Configurações de e-mail não encontradas no banco de dados.' }, { status: 500 });
-    }
-
-    const emailSettings = settingsSnap.data() as EmailSettings;
-
-    // Construct the email content and subject specific to the "Entregue" status
-    const subject = `Atualização da Ordem de Serviço ${serviceOrder.orderNumber} - Status: Entregue`;
     const htmlContent = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <h2 style="color: #0056b3;">Ordem de Serviço ${serviceOrder.orderNumber} - Entregue!</h2>
-        <p>Prezado(a) ${client.name},</p>
-        <p>Temos uma excelente notícia! Sua Ordem de Serviço <strong>${serviceOrder.orderNumber}</strong> referente ao equipamento <strong>${serviceOrder.equipment.type}</strong> com problema <strong>${serviceOrder.reportedProblem}</strong> foi oficialmente marcada como <strong>ENTREGUE</strong>.</p>
-        <p><strong>Detalhes da Entrega:</strong></p>
+      <div style="${commonStyle}">
+        <h2 style="${headerStyle}">Atualização da Ordem de Serviço ${order.orderNumber}</h2>
+        <p>Prezado(a) ${clientName},</p>
+        ${messageBody}
+        <p><strong>Resumo do Equipamento:</strong></p>
         <ul>
-          <li><strong>Número da OS:</strong> ${serviceOrder.orderNumber}</li>
-          <li><strong>Equipamento:</strong> ${serviceOrder.equipment.type} - ${serviceOrder.equipment.brand} ${serviceOrder.equipment.model}</li>
-          <li><strong>Problema Relatado:</strong> ${serviceOrder.reportedProblem}</li>
-          <li><strong>Status Atual:</strong> <strong style="color: #28a745;">ENTREGUE</strong></li>
-          ${serviceOrder.technicalSolution ? `<li><strong>Solução Técnica:</strong> ${serviceOrder.technicalSolution}</li>` : ''}
-          <li><strong>Data da Atualização:</strong> ${new Date().toLocaleDateString('pt-BR')}</li>
+          <li><strong>Número da OS:</strong> ${order.orderNumber}</li>
+          <li><strong>Equipamento:</strong> ${order.equipment.type} - ${order.equipment.brand} ${order.equipment.model}</li>
+          <li><strong>Problema Relatado:</strong> ${order.reportedProblem}</li>
         </ul>
-        <p>Agradecemos a sua confiança nos nossos serviços. Caso tenha qualquer dúvida ou necessite de mais assistência, por favor, não hesite em nos contatar.</p>
         <p>Atenciosamente,</p>
         <p>Sua Equipe TSMIT</p>
         <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;"/>
-        <p style="font-size: 0.8em; color: #777;">Este é um e-mail automático, por favor, não responda.</p>
+        <p style="${footerStyle}">Este é um e-mail automático, por favor, não responda.</p>
       </div>
     `;
+    
+    return { subject, htmlContent };
+}
 
-    // Call the refactored sendEmail function
+
+export async function POST(request: Request) {
+  try {
+    const { orderId, statusName } = await request.json();
+
+    if (!orderId || !statusName) {
+      return NextResponse.json({ error: 'orderId e statusName são obrigatórios.' }, { status: 400 });
+    }
+
+    // --- Fetch data from Firestore using Admin SDK syntax ---
+    const orderDocRef = db.collection('serviceOrders').doc(orderId);
+    const orderSnap = await orderDocRef.get();
+
+    if (!orderSnap.exists) {
+      return NextResponse.json({ error: 'Ordem de Serviço não encontrada.' }, { status: 404 });
+    }
+    const serviceOrder = orderSnap.data() as ServiceOrder;
+
+    const clientDocRef = db.collection('clients').doc(serviceOrder.clientId);
+    const clientSnap = await clientDocRef.get();
+
+    if (!clientSnap.exists) {
+      return NextResponse.json({ error: 'Cliente não encontrado.' }, { status: 404 });
+    }
+    const client = clientSnap.data() as Client;
+    
+    const settingsDocRef = db.collection('settings').doc('email');
+    const settingsSnap = await settingsDocRef.get();
+
+    if (!settingsSnap.exists) {
+        return NextResponse.json({ error: 'Configurações de e-mail não encontradas.' }, { status: 500 });
+    }
+    const emailSettings = settingsSnap.data() as EmailSettings;
+    // --- End of data fetching ---
+
+    const recipientEmail = client.email || serviceOrder.collaborator.email;
+    if (!recipientEmail) {
+      return NextResponse.json({ error: 'Nenhum e-mail de destinatário válido.' }, { status: 400 });
+    }
+
+    const { subject, htmlContent } = generateEmailContent(serviceOrder, statusName, client.name);
+
     await sendEmail(recipientEmail, subject, htmlContent, emailSettings);
 
     return NextResponse.json({ message: 'E-mail de notificação enviado com sucesso.' });
+
   } catch (error) {
-    console.error('Erro ao enviar e-mail de notificação:', error);
-    return NextResponse.json({ 
-      message: 'Erro ao enviar e-mail de notificação.', 
-      error: (error instanceof Error) ? error.message : String(error) 
-    }, { status: 500 });
+    console.error('Erro ao processar a requisição de e-mail:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+    return NextResponse.json({ error: 'Erro interno do servidor.', details: errorMessage }, { status: 500 });
   }
 }
