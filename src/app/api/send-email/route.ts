@@ -71,7 +71,9 @@ function generateEmailContent(order: ServiceOrder, statusName: string, clientNam
 
 export async function POST(request: Request) {
   try {
-    const { orderId, statusName } = await request.json();
+    const body = await request.json();
+    console.log('Payload recebido:', body);
+    const { orderId, statusName } = body;
 
     if (!orderId || !statusName) {
       return NextResponse.json({ error: 'orderId e statusName são obrigatórios.' }, { status: 400 });
