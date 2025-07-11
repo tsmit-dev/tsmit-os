@@ -482,24 +482,27 @@ export const updateServiceOrder = async (
         }
 
         const currentOrderData = currentOrderSnap.data();
-        const oldStatusId = currentOrderData.status;
+        const oldStatusId = currentOrderData.statusId;
 
-        const newLogEntry: LogEntry = {
+        const newLogEntry: Omit<LogEntry, 'id'> = {
             timestamp: new Date(),
             responsible,
             fromStatus: oldStatusId,
             toStatus: newStatusId,
-            observation: observation ?? undefined, 
         };
+
+        if (observation) {
+            newLogEntry.observation = observation;
+        }
 
         const updatePayload: any = {};
         let hasChanges = false;
 
         if (newStatusId !== oldStatusId) {
-            updatePayload.status = newStatusId;
+            updatePayload.statusId = newStatusId;
             updatePayload.logs = arrayUnion(newLogEntry);
             hasChanges = true;
-        } else if (observation) { // Also add log if only observation is added
+        } else if (observation) {
              updatePayload.logs = arrayUnion(newLogEntry);
              hasChanges = true;
         }
@@ -525,8 +528,6 @@ export const updateServiceOrder = async (
 
         const updatedOrder = await getServiceOrderById(id);
 
-        // Email sending logic is now triggered on the client-side based on the status flag,
-        // but the API call is still made. We just need to ensure the data is fresh.
         let emailSent = false;
         let emailErrorMessage: string | undefined;
 
@@ -564,7 +565,9 @@ export const updateServiceOrder = async (
 
     } catch (error) {
         console.error("Error updating service order:", error);
-        const message = error instanceof Error ? error.message : "Erro desconhecido.";
-        return { updatedOrder: null, emailSent: false, emailErrorMessage: `Erro ao atualizar OS: ${message}` };
+        if (error instanceof Error) {
+            return { updatedOrder: null, emailSent: false, emailErrorMessage: `Erro ao atualizar OS: ${error.message}` };
+        }
+        return { updatedOrder: null, emailSent: false, emailErrorMessage: "Ocorreu um erro desconhecido ao atualizar a OS." };
     }
 };

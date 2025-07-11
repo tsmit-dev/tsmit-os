@@ -203,7 +203,7 @@ export default function OsDetailPage() {
         }
 
         // --- FIX: Ensure observation is null, not undefined, when empty ---
-        const observationText = technicalSolution.trim() ? `${noteLabel}: ${technicalSolution.trim()}` : undefined;
+        const observationText = technicalSolution.trim() ? `${noteLabel}: ${technicalSolution.trim()}` : "";
         
         setIsUpdating(true);
         try {
