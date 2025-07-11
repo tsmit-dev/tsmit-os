@@ -1,11 +1,10 @@
 "use client";
 import React, { useEffect } from 'react';
-import { SidebarProvider } from '@/components/ui/sidebar';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
-import AppLayoutContent from './_app-layout-content';
 import { usePermissions } from '@/context/PermissionsContext';
-import { StatusesProvider } from '@/hooks/use-statuses'; // Import the new provider
+import { StatusesProvider } from '@/hooks/use-statuses';
+import { SidebarNav } from '@/components/sidebar-nav'; // Import the new SidebarNav
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -21,22 +20,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-            <Skeleton className="h-12 w-12 rounded-full" />
-            <div className="space-y-2">
-                <Skeleton className="h-4 w-[250px]" />
-                <Skeleton className="h-4 w-[200px]" />
-            </div>
-            <p>Carregando sua sessão...</p>
+          <Skeleton className="h-12 w-12 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-[250px]" />
+            <Skeleton className="h-4 w-[200px]" />
+          </div>
+          <p>Carregando sua sessão...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <StatusesProvider> {/* Wrap the content with StatusesProvider */}
-      <SidebarProvider>
-          <AppLayoutContent>{children}</AppLayoutContent>
-      </SidebarProvider>
+    <StatusesProvider>
+      <div className="grid min-h-screen w-full lg:grid-cols-[280px_1fr]">
+        <SidebarNav />
+        <div className="flex flex-col">
+          <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+            {children}
+          </main>
+        </div>
+      </div>
     </StatusesProvider>
   );
 }
