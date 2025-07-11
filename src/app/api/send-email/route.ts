@@ -5,7 +5,7 @@ import { db } from '@/lib/firebaseAdmin';
 
 // Initialize MailerSend with your API token
 const mailerSend = new MailerSend({
-  apiKey: 'mlsn.407942a9404e0fabb565e1b1df90e93c438947985e98dbef3578716a192b8acb',
+  apiKey: 'mlsn.8b705c26458b033a96e26edeaca21b56308a7f5374b7a42e39d8cdf6de9402de',
 });
 
 /**
