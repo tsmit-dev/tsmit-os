@@ -19,6 +19,7 @@ interface ClientsTableProps {
 }
 
 export function ClientsTable({ clients, onClientChange }: ClientsTableProps) {
+  const isMobile = useIsMobile();
   const { toast } = useToast();
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [providedServices, setProvidedServices] = useState<ProvidedService[]>([]);
