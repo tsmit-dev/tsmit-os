@@ -198,6 +198,11 @@ export default function OsDetailPage() {
             });
     
             if (currentStatus.triggersEmail) {
+                // Temporarily disabling email sending for diagnostics
+                console.log("Email trigger detected, but sending is temporarily disabled.");
+                toast({ title: "Sucesso (Email Desativado)", description: "OS atualizada. O envio de e-mail está desativado para teste." });
+
+                /*
                 try {
                     const response = await fetch('/api/send-email', {
                         method: 'POST',
@@ -215,6 +220,7 @@ export default function OsDetailPage() {
                 } catch (emailError: any) {
                     toast({ title: "OS Atualizada, mas...", description: `A OS foi salva, mas falhou ao enviar o e-mail: ${emailError.message}`, variant: "destructive" });
                 }
+                */
             } else {
                 toast({ title: "Sucesso!", description: "Ordem de Serviço atualizada." });
             }
