@@ -40,6 +40,9 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { EditOsDialog } from "@/components/edit-os-dialog";
 import { StatusBadge } from "@/components/status-badge";
+import { doc, updateDoc, arrayUnion } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 
 // Helper to translate field names for the edit history
 const getTranslatedFieldName = (field: string): string => {
@@ -158,8 +161,74 @@ export default function OsDetailPage() {
     }, [loadingPermissions, hasPermission, router, fetchInitialData]);
 
     const handleUpdate = async () => {
-        // ... (update logic remains the same)
+        if (!order || !currentStatus || !user) return;
+    
+        if (currentStatus.id === order.status.id) {
+            toast({ title: "Atenção", description: "Selecione um novo status para atualizar.", variant: "default" });
+            return;
+        }
+    
+        if (currentStatus.isPickupStatus && !technicalSolution.trim()) {
+            toast({ title: "Erro de Validação", description: "A Solução Técnica é obrigatória para este status.", variant: "destructive" });
+            return;
+        }
+    
+        if (currentStatus.triggersEmail && order.contractedServices?.some(s => !confirmedServiceIds.includes(s.id))) {
+            toast({ title: "Confirmação Pendente", description: "Confirme todos os serviços contratados antes de prosseguir.", variant: "destructive" });
+            return;
+        }
+    
+        setIsUpdating(true);
+    
+        const newLog = {
+            fromStatus: order.status.id,
+            toStatus: currentStatus.id,
+            observation: technicalSolution.trim(),
+            responsible: user.name || user.email,
+            timestamp: new Date().toISOString(),
+        };
+    
+        try {
+            const osRef = doc(db, 'serviceOrders', id);
+            await updateDoc(osRef, {
+                status: currentStatus,
+                technicalSolution: technicalSolution.trim(),
+                confirmedServiceIds: confirmedServiceIds,
+                logs: arrayUnion(newLog),
+            });
+    
+            if (currentStatus.triggersEmail) {
+                try {
+                    const response = await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            orderId: id,
+                            statusName: currentStatus.name,
+                        }),
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Falha ao enviar e-mail de notificação.');
+                    }
+                    toast({ title: "Sucesso!", description: "OS atualizada e cliente notificado." });
+                } catch (emailError: any) {
+                    toast({ title: "OS Atualizada, mas...", description: `A OS foi salva, mas falhou ao enviar o e-mail: ${emailError.message}`, variant: "destructive" });
+                }
+            } else {
+                toast({ title: "Sucesso!", description: "Ordem de Serviço atualizada." });
+            }
+    
+            fetchInitialData();
+    
+        } catch (error) {
+            console.error("Error updating service order: ", error);
+            toast({ title: "Erro", description: "Não foi possível atualizar a OS.", variant: "destructive" });
+        } finally {
+            setIsUpdating(false);
+        }
     };
+    
 
     if (loadingPermissions || loading) return <OsDetailSkeleton />;
     if (!order || !hasPermission('os')) return <p>Acesso negado ou OS não encontrada.</p>;
