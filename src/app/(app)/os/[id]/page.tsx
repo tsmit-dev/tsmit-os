@@ -79,7 +79,7 @@ export default function OsDetailPage() {
     const [order, setOrder] = useState<ServiceOrder | null>(null);
     const [loading, setLoading] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
-    const [currentStatus, setCurrentStatus] = useState<Status | undefined>();
+    const [selectedStatusId, setSelectedStatusId] = useState<string | undefined>();
     const [technicalSolution, setTechnicalSolution] = useState('');
     const [confirmedServiceIds, setConfirmedServiceIds] = useState<string[]>([]);
     const [isEditOsDialogOpen, setIsEditOsDialogOpen] = useState(false);
@@ -88,7 +88,9 @@ export default function OsDetailPage() {
         return order?.status?.name.toLowerCase() === 'entregue';
     }, [order]);
 
-    const isPickupStatusSelected = useMemo(() => currentStatus?.isPickupStatus ?? false, [currentStatus]);
+    const selectedStatus = useMemo(() => statuses.find(s => s.id === selectedStatusId), [statuses, selectedStatusId]);
+
+    const isPickupStatusSelected = useMemo(() => selectedStatus?.isPickupStatus ?? false, [selectedStatus]);
     const noteLabel = useMemo(() => isPickupStatusSelected ? "Solução Técnica" : "Nota", [isPickupStatusSelected]);
     const notePlaceholder = useMemo(() => isPickupStatusSelected ? "Descreva a solução técnica detalhadamente." : "Adicione uma nota (opcional).", [isPickupStatusSelected]);
 
@@ -130,7 +132,7 @@ export default function OsDetailPage() {
             ]);
             if (orderData) {
                 setOrder(orderData);
-                setCurrentStatus(orderData.status);
+                setSelectedStatusId(orderData.status.id);
                 setTechnicalSolution(orderData.technicalSolution || '');
                 setConfirmedServiceIds(orderData.confirmedServiceIds || []);
                 setStatuses(statusesData);
@@ -139,6 +141,7 @@ export default function OsDetailPage() {
                 router.push('/os');
             }
         } catch (error) {
+            console.error("Fetch error:", error);
             toast({ title: "Erro", description: "Não foi possível carregar a OS.", variant: "destructive" });
         } finally {
             setLoading(false);
@@ -148,7 +151,10 @@ export default function OsDetailPage() {
     const refreshOrder = useCallback(async () => {
         if (!id) return;
         const data = await getServiceOrderById(id);
-        if (data) setOrder(data);
+        if (data) {
+            setOrder(data);
+            setSelectedStatusId(data.status.id)
+        };
     }, [id]);
 
     useEffect(() => {
@@ -161,19 +167,19 @@ export default function OsDetailPage() {
     }, [loadingPermissions, hasPermission, router, fetchInitialData]);
 
     const handleUpdate = async () => {
-        if (!order || !currentStatus || !user) return;
+        if (!order || !selectedStatus || !user) return;
     
-        if (currentStatus.id === order.status.id) {
+        if (selectedStatus.id === order.status.id) {
             toast({ title: "Atenção", description: "Selecione um novo status para atualizar.", variant: "default" });
             return;
         }
     
-        if (currentStatus.isPickupStatus && !technicalSolution.trim()) {
+        if (selectedStatus.isPickupStatus && !technicalSolution.trim()) {
             toast({ title: "Erro de Validação", description: "A Solução Técnica é obrigatória para este status.", variant: "destructive" });
             return;
         }
     
-        if (currentStatus.triggersEmail && order.contractedServices?.some(s => !confirmedServiceIds.includes(s.id))) {
+        if (selectedStatus.triggersEmail && order.contractedServices?.some(s => !confirmedServiceIds.includes(s.id))) {
             toast({ title: "Confirmação Pendente", description: "Confirme todos os serviços contratados antes de prosseguir.", variant: "destructive" });
             return;
         }
@@ -182,34 +188,29 @@ export default function OsDetailPage() {
     
         const newLog = {
             fromStatus: order.status.id,
-            toStatus: currentStatus.id,
+            toStatus: selectedStatus.id,
             observation: technicalSolution.trim(),
-            responsible: user.name || user.email,
+            responsible: user.name || user.email || "Usuário desconhecido",
             timestamp: new Date().toISOString(),
         };
     
         try {
             const osRef = doc(db, 'serviceOrders', id);
             await updateDoc(osRef, {
-                status: currentStatus,
+                statusId: selectedStatus.id, // Salva o ID do status
                 technicalSolution: technicalSolution.trim(),
                 confirmedServiceIds: confirmedServiceIds,
                 logs: arrayUnion(newLog),
             });
     
-            if (currentStatus.triggersEmail) {
-                // Temporarily disabling email sending for diagnostics
-                console.log("Email trigger detected, but sending is temporarily disabled.");
-                toast({ title: "Sucesso (Email Desativado)", description: "OS atualizada. O envio de e-mail está desativado para teste." });
-
-                /*
+            if (selectedStatus.triggersEmail) {
                 try {
                     const response = await fetch('/api/send-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             orderId: id,
-                            statusName: currentStatus.name,
+                            statusName: selectedStatus.name,
                         }),
                     });
                     if (!response.ok) {
@@ -220,7 +221,6 @@ export default function OsDetailPage() {
                 } catch (emailError: any) {
                     toast({ title: "OS Atualizada, mas...", description: `A OS foi salva, mas falhou ao enviar o e-mail: ${emailError.message}`, variant: "destructive" });
                 }
-                */
             } else {
                 toast({ title: "Sucesso!", description: "Ordem de Serviço atualizada." });
             }
@@ -239,7 +239,7 @@ export default function OsDetailPage() {
     if (loadingPermissions || loading) return <OsDetailSkeleton />;
     if (!order || !hasPermission('os')) return <p>Acesso negado ou OS não encontrada.</p>;
 
-    const showServiceConfirmation = currentStatus?.triggersEmail;
+    const showServiceConfirmation = selectedStatus?.triggersEmail;
     const hasIncompleteServices = order.contractedServices?.some(service => !confirmedServiceIds.includes(service.id));
     const showAlertBanner = showServiceConfirmation && hasIncompleteServices;
 
@@ -317,7 +317,7 @@ export default function OsDetailPage() {
                             <CardContent className="space-y-4">
                                 <div className="space-y-2">
                                     <Label>Alterar Status para:</Label>
-                                    <Select value={currentStatus?.id} onValueChange={(v) => setCurrentStatus(statuses.find(s => s.id === v))} disabled={isUpdating || isDelivered}>
+                                    <Select value={selectedStatusId} onValueChange={setSelectedStatusId} disabled={isUpdating || isDelivered}>
                                         <SelectTrigger><SelectValue placeholder="Selecione o próximo status" /></SelectTrigger>
                                         <SelectContent>
                                             {order.status && <SelectItem value={order.status.id} disabled>-- {order.status.name} (Atual) --</SelectItem>}

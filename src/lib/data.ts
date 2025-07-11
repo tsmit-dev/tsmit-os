@@ -1,24 +1,3 @@
-/**
- * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- * !! AVISO DE SEGURANÇA CRÍTICO:                                                                                 !!
- * !! As operações de `registerUser` e `deleteUser` neste arquivo estão sendo executadas DIRETAMENTE NO FRONTEND. !!
- * !! Esta é uma PRÁTICA EXTREMAMENTE INSEGURA para gerenciar usuários do Firebase Authentication, pois:         !!
- * !!                                                                                                            !!
- * !! 1. EXPOSIÇÃO DE CREDENCIAIS: A criação e exclusão de usuários com privilégios administrativos requer       !!
- * !!    credenciais que NUNCA devem ser expostas no código do cliente. Fazer isso permite que qualquer um com   !!
- * !!    acesso ao seu frontend (via navegador, ferramentas de desenvolvedor, etc.) execute operações admin.    !!
- * !! 2. VULNERABILIDADE: Malfeitores podem explorar esta falha para criar ou deletar contas de usuário        !!
- * !!    arbitrariamente, comprometendo a integridade e a segurança do seu sistema.                            !!
- * !! 3. LIMITAÇÃO DA API: A API de cliente do Firebase Authentication não permite a exclusão de usuários        !!
- * !!    arbitrários (apenas o usuário atualmente logado pode se auto-excluir). Para excluir outros usuários,  !!
- * !!    É OBRIGATÓRIO USAR O FIREBASE ADMIN SDK, que DEVE rodar em um ambiente de servidor seguro (ex: Cloud Functions).
- * !!                                                                                                            !!
- * !! RECOMENDAÇÃO FORTEMENTE:                                                                                     !!
- * !! Para gerenciar usuários de forma segura (criar, deletar, etc.) em um painel de administração,             !!
- * !! É IMPRESCINDÍVEL USAR FIREBASE CLOUD FUNCTIONS (ou outro backend seguro) que utilize o Firebase Admin SDK. !!
- * !! Considerar esta implementação apenas para PROTÓTIPOS. NÃO IMPLANTE EM PRODUÇÃO NESTA CONFIGURAÇÃO.        !!
- * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- */
 "use client"
 import { ServiceOrder, User, Client, LogEntry, Role, UpdateServiceOrderResult, ProvidedService, EditLogEntry, EditLogChange, Status } from "./types";
 import { db, auth } from "./firebase"; 
@@ -285,12 +264,12 @@ export const getServiceOrders = async (): Promise<ServiceOrder[]> => {
     const clientMap = new Map<string, Client>(clients.map(c => [c.id, c]));
     const statusMap = new Map<string, Status>(statuses.map(s => [s.id, s]));
 
-    const defaultStatus: Status = { id: 'unknown', name: 'Desconhecido', color: '#808080', order: 999 };
+    const defaultStatus: Status = { id: 'unknown', name: 'Desconhecido', color: '#808080', order: 999, triggersEmail: false, isPickupStatus: false };
 
     return serviceOrdersSnapshot.docs.map(doc => {
-        const orderData = { ...doc.data(), id: doc.id } as any; // Raw data from firestore
+        const orderData = { ...doc.data(), id: doc.id } as any; 
         const client = clientMap.get(orderData.clientId);
-        const status = statusMap.get(orderData.status) || defaultStatus;
+        const status = statusMap.get(orderData.statusId) || defaultStatus;
 
         return {
             ...orderData,
@@ -317,14 +296,14 @@ export const getServiceOrderById = async (id: string): Promise<ServiceOrder | nu
     const serviceOrderSnap = await getDoc(serviceOrderDocRef);
 
     if (serviceOrderSnap.exists()) {
-        const orderData = serviceOrderSnap.data() as any; // Raw data
+        const orderData = serviceOrderSnap.data() as any;
         const [client, statuses] = await Promise.all([
             getClientById(orderData.clientId),
             getStatuses()
         ]);
         
         const statusMap = new Map<string, Status>(statuses.map(s => [s.id, s]));
-        const status = statusMap.get(orderData.status) || { id: 'unknown', name: 'Desconhecido', color: '#808080', order: 999 };
+        const status = statusMap.get(orderData.statusId) || { id: 'unknown', name: 'Desconhecido', color: '#808080', order: 999, triggersEmail: false, isPickupStatus: false };
         
         return {
             ...orderData, 
@@ -371,7 +350,7 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
         throw new Error("Service Order not found.");
     }
 
-    const oldOrderData = (await getServiceOrderById(id))!; // get enriched data
+    const oldOrderData = (await getServiceOrderById(id))!; 
 
     const changes: EditLogChange[] = [];
 
@@ -419,7 +398,6 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
     return getServiceOrderById(id);
 };
 
-// MODIFIED: Accepts statusId
 export const addServiceOrder = async (
     data: Omit<ServiceOrder, 'id' | 'orderNumber' | 'createdAt' | 'logs' | 'status' | 'attachments' | 'contractedServices' | 'confirmedServiceIds' | 'editLogs'> & { statusId: string }
   ): Promise<ServiceOrder> => {
@@ -453,7 +431,7 @@ export const addServiceOrder = async (
         reportedProblem: data.reportedProblem,
         analyst: data.analyst,
         orderNumber: formattedOrderNumber,
-        status: data.statusId, // Store status ID
+        statusId: data.statusId, 
         createdAt: new Date(),
         logs: [
           {
@@ -472,120 +450,8 @@ export const addServiceOrder = async (
 
     await setDoc(newOrderRef, newOrderData);
   
-    // Return the newly created and enriched service order
     return (await getServiceOrderById(newOrderRef.id))!;
   };
-
-// CORRECTED: Handles empty observation to prevent Firestore error.
-export const updateServiceOrder = async (
-    id: string, 
-    newStatusId: string, 
-    responsible: string, 
-    technicalSolution?: string, 
-    observation?: string, 
-    attachments?: string[], 
-    confirmedServiceIds?: string[]
-): Promise<UpdateServiceOrderResult> => {
-    const serviceOrderDocRef = doc(db, "serviceOrders", id);
-    
-    try {
-        const currentOrderSnap = await getDoc(serviceOrderDocRef);
-        if (!currentOrderSnap.exists()) {
-            return { updatedOrder: null, emailSent: false, emailErrorMessage: "Ordem de serviço não encontrada." };
-        }
-
-        const currentOrderData = currentOrderSnap.data();
-        const oldStatusId = currentOrderData.status;
-
-        // Dynamically build the log entry to avoid adding an 'undefined' observation
-        const newLogEntry: Omit<LogEntry, 'observation'> & { observation?: string } = {
-            timestamp: new Date(),
-            responsible,
-            fromStatus: oldStatusId,
-            toStatus: newStatusId,
-        };
-        if (observation) {
-            newLogEntry.observation = observation;
-        }
-
-        const updatePayload: any = {};
-        let hasChanges = false;
-        
-        const isStatusChanging = newStatusId !== oldStatusId;
-        const isObservationPresent = !!observation;
-
-        // A log should be created if the status changes OR if a new observation is added.
-        if (isStatusChanging || isObservationPresent) {
-            updatePayload.logs = arrayUnion(newLogEntry);
-            if(isStatusChanging){
-                updatePayload.status = newStatusId;
-            }
-            hasChanges = true;
-        }
-        
-        if (technicalSolution !== undefined && technicalSolution !== currentOrderData.technicalSolution) {
-            updatePayload.technicalSolution = technicalSolution;
-            hasChanges = true;
-        }
-
-        if (attachments !== undefined) {
-            updatePayload.attachments = attachments;
-            hasChanges = true;
-        }
-
-        if (confirmedServiceIds !== undefined) {
-            updatePayload.confirmedServiceIds = confirmedServiceIds;
-            hasChanges = true;
-        }
-
-        if (hasChanges) {
-            await updateDoc(serviceOrderDocRef, updatePayload);
-        }
-
-        const updatedOrder = await getServiceOrderById(id);
-
-        // Email sending logic
-        let emailSent = false;
-        let emailErrorMessage: string | undefined;
-
-        if (updatedOrder && isStatusChanging) { // Only send email on status change
-            const newStatusObjQuery = await getDoc(doc(db, 'statuses', newStatusId));
-            const triggersEmail = newStatusObjQuery.data()?.triggersEmail;
-            
-            if (triggersEmail) {
-                 const client = await getClientById(updatedOrder.clientId);
-                 const recipientEmail = updatedOrder.collaborator.email || client?.email;
-
-                 if (recipientEmail) {
-                    try {
-                        const response = await fetch('/api/send-email', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ serviceOrder: updatedOrder, client }),
-                        });
-                        const responseData = await response.json();
-                        if (!response.ok) {
-                            emailErrorMessage = `Falha ao enviar e-mail: ${responseData.message || response.statusText}`;
-                        } else {
-                            emailSent = true;
-                        }
-                    } catch (error) {
-                        emailErrorMessage = `Erro de rede ao tentar enviar e-mail: ${(error as Error).message}`;
-                    }
-                 } else {
-                    emailErrorMessage = 'Nenhum e-mail de destinatário válido para notificação.';
-                 }
-            }
-        }
-        
-        return { updatedOrder, emailSent, emailErrorMessage };
-
-    } catch (error) {
-        console.error("Error updating service order:", error);
-        const message = error instanceof Error ? error.message : "Erro desconhecido.";
-        return { updatedOrder: null, emailSent: false, emailErrorMessage: `Erro ao atualizar OS: ${message}` };
-    }
-};
 
 export const deleteServiceOrder = async (id: string): Promise<boolean> => {
     const serviceOrderDocRef = doc(db, "serviceOrders", id);
