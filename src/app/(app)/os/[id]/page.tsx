@@ -191,13 +191,13 @@ export default function OsDetailPage() {
             toStatus: selectedStatus.id,
             observation: technicalSolution.trim(),
             responsible: user.name || user.email || "Usuário desconhecido",
-            timestamp: new Date().toISOString(),
+            timestamp: new Date(), // CORREÇÃO: Usar new Date() diretamente
         };
     
         try {
             const osRef = doc(db, 'serviceOrders', id);
             await updateDoc(osRef, {
-                statusId: selectedStatus.id, // Salva o ID do status
+                statusId: selectedStatus.id,
                 technicalSolution: technicalSolution.trim(),
                 confirmedServiceIds: confirmedServiceIds,
                 logs: arrayUnion(newLog),
