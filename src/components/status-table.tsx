@@ -5,13 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Status } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { MoreHorizontal, Trash2, Pencil } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Trash2, Pencil } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +15,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -104,7 +99,7 @@ export const StatusTable: React.FC<StatusTableProps> = ({ statuses, onStatusChan
                         <TableHead>Status Final?</TableHead>
                         <TableHead>Status Inicial?</TableHead>
                         <TableHead>Dispara Email?</TableHead>
-                        <TableHead className="w-[80px] text-right">Ações</TableHead>
+                        <TableHead className="w-[120px] text-right">Ações</TableHead>
                     </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -129,26 +124,29 @@ export const StatusTable: React.FC<StatusTableProps> = ({ statuses, onStatusChan
                             <TableCell>{status.isFinal ? "Sim" : "Não"}</TableCell>
                             <TableCell>{status.isInitial ? "Sim" : "Não"}</TableCell>
                             <TableCell>{status.triggersEmail ? "Sim" : "Não"}</TableCell>
-                            <TableCell className="text-right">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                    <span className="sr-only">Abrir menu</span>
-                                    <MoreHorizontal className="h-4 w-4" />
+                            <TableCell className="text-right space-x-2">
+                                <Button variant="ghost" size="icon" onClick={() => openEdit(status)}>
+                                    <Pencil className="h-4 w-4" />
                                 </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => openEdit(status)}>
-                                    <Pencil className="mr-2 h-4 w-4" /> Editar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onClick={() => handleDeleteClick(status)}
-                                    className="text-red-600"
-                                >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                                </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                            Esta ação não pode ser desfeita. Isso excluirá permanentemente o status "{statusToDelete?.name}".
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleDeleteClick(status)}>Continuar</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
                             </TableCell>
                         </TableRow>
                     ))}
