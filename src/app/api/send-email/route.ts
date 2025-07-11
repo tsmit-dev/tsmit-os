@@ -72,12 +72,20 @@ function generateEmailContent(order: ServiceOrder, statusName: string, clientNam
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    console.log('Payload recebido:', body);
-    const { orderId, statusName } = body;
+    const svcOrder = body.serviceOrder as ServiceOrder;
+    const cli      = body.client      as Client;
 
-    if (!orderId || !statusName) {
-      return NextResponse.json({ error: 'orderId e statusName são obrigatórios.' }, { status: 400 });
+    if (!svcOrder?.id || !svcOrder.status?.name) {
+      return NextResponse.json(
+        { error: "serviceOrder.id e serviceOrder.status.name são obrigatórios." },
+        { status: 400 }
+      );
     }
+
+    const orderId    = svcOrder.id;
+    const statusName = svcOrder.status.name;
+    const recipientEmail = cli.email || svcOrder.collaborator.email;
+    const recipientName  = cli.name  || svcOrder.collaborator.name;
 
     // --- Fetch all necessary data from Firestore ---
     const orderDocRef = db.collection('serviceOrders').doc(orderId);
@@ -109,9 +117,6 @@ export async function POST(request: Request) {
     }
     const client = clientSnap.data() as Client;
     // --- End of data fetching ---
-
-    const recipientEmail = client.email || serviceOrder.collaborator.email;
-    const recipientName = client.name || serviceOrder.collaborator.name;
 
     if (!recipientEmail) {
       return NextResponse.json({ error: 'Nenhum e-mail de destinatário válido.' }, { status: 400 });
