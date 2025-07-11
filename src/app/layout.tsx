@@ -1,8 +1,10 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/components/auth-provider';
 import { Toaster } from "@/components/ui/toaster";
-import { PermissionsProvider } from '@/context/PermissionsContext'; // Importe o provider
+import { PermissionsProvider } from '@/context/PermissionsContext';
+import { QueryProvider } from '@/components/query-provider'; // Importe o QueryProvider
 
 export const metadata: Metadata = {
   title: 'TSMIT - Sistema de Controle de OS',
@@ -28,9 +30,11 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased h-full">
         <AuthProvider>
-          <PermissionsProvider> {/* Envolva os children com o PermissionsProvider */}
-            {children}
-            <Toaster />
+          <PermissionsProvider>
+            <QueryProvider> {/* Envolva a aplicação com o QueryProvider */}
+              {children}
+              <Toaster />
+            </QueryProvider>
           </PermissionsProvider>
         </AuthProvider>
       </body>
