@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Status } from '@/lib/types';
 import { collection, onSnapshot, orderBy, query, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { FileBadge } from 'lucide-react';
+import { FileBadge, Plus } from 'lucide-react';
 import { StatusTable } from '@/components/status-table';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/context/PermissionsContext';
@@ -90,7 +90,10 @@ export default function ManageStatusPage() {
     );
 
     const actionButton = (
-        <Button onClick={() => setAddStatusDialogOpen(true)}>Adicionar Status</Button>
+        <Button onClick={() => setAddStatusDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Adicionar Status
+        </Button>
     );
 
     return (

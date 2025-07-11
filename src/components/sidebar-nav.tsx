@@ -105,19 +105,19 @@ export function SidebarNav() {
               </SidebarCollapsibleButton>
               <SidebarCollapsibleContent>
                 <SidebarMenu>
-                  {hasPermission('adminUsers') && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/users')} tooltip="Gerenciar usuários do sistema">
-                        <Link href="/admin/users"><Users /><span>Usuários</span></Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )}
                   {hasPermission('adminSettings') && (
                      <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname === '/admin/settings'} tooltip="Ver todas as configurações">
                             <Link href="/admin/settings"><Settings /><span>Geral</span></Link>
                         </SidebarMenuButton>
                      </SidebarMenuItem>
+                  )}
+                  {hasPermission('adminUsers') && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/users')} tooltip="Gerenciar usuários do sistema">
+                        <Link href="/admin/users"><Users /><span>Usuários</span></Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   )}
                   {hasPermission('adminRoles') && (
                     <SidebarMenuItem>
