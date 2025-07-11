@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Status } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { MoreHorizontal, Trash2, Edit } from "lucide-react";
+import { MoreHorizontal, Trash2, Pencil } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -139,7 +139,7 @@ export const StatusTable: React.FC<StatusTableProps> = ({ statuses, onStatusChan
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                 <DropdownMenuItem onSelect={() => openEdit(status)}>
-                                    <Edit className="mr-2 h-4 w-4" /> Editar
+                                    <Pencil className="mr-2 h-4 w-4" /> Editar
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                     onClick={() => handleDeleteClick(status)}

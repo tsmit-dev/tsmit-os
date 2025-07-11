@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { registerUser } from "@/lib/data";
 
 const userSchema = z.object({
@@ -225,4 +225,20 @@ export function EditUserSheet({ user, roles, onUserChange}: EditUserSheetProps) 
             </Button>
         </UserFormSheet>
     )
+}
+
+interface AddUserSheetProps {
+    roles: Role[];
+    onUserChange: () => void;
+}
+
+export function AddUserSheet({ roles, onUserChange }: AddUserSheetProps) {
+    return (
+        <UserFormSheet roles={roles} onUserChange={onUserChange}>
+            <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Adicionar Usuário
+            </Button>
+        </UserFormSheet>
+    );
 }

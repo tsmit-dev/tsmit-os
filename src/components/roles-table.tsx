@@ -1,219 +1,100 @@
 "use client";
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Role } from "@/lib/types";
+import { Role, PERMISSION_LABELS, PermissionKey } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { Edit, Trash2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Permissions } from "@/lib/types";
-import { updateRole, deleteRole } from "@/lib/data";
+import { Trash2 } from "lucide-react";
+import { deleteRole } from "@/lib/data";
+import { EditRoleSheet } from './role-form-sheet';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 
 interface RolesTableProps {
   roles: Role[];
   onRoleChange: () => void;
 }
 
-const defaultPermissions: Permissions = {
-    dashboard: false,
-    clients: false,
-    os: false,
-    adminReports: false,
-    adminUsers: false,
-    adminRoles: false,
-    adminServices: false,
-    adminSettings: false,
-};
-
-const RoleForm: React.FC<{ role: Role, onSave: (role: Role) => void, onClose: () => void }> = ({ role, onSave, onClose }) => {
-    const [name, setName] = useState(role?.name || "");
-    const [permissions, setPermissions] = useState<Permissions>(role?.permissions || defaultPermissions);
+export function RolesTable({ roles, onRoleChange }: RolesTableProps) {
     const { toast } = useToast();
 
-    const handlePermissionChange = (permissionKey: keyof Permissions, checked: boolean) => {
-        setPermissions((prev) => ({
-        ...prev,
-        [permissionKey]: checked,
-        }));
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!name.trim()) {
-        toast({
-            title: "Erro",
-            description: "O nome do cargo não pode ser vazio.",
-            variant: "destructive",
-        });
-        return;
-        }
-
+    const handleDeleteRole = async (id: string) => {
         try {
-            const updatedRole = await updateRole(role.id, { name, permissions });
-            if (updatedRole) {
-                toast({ title: "Sucesso", description: "Cargo atualizado com sucesso." });
-                onSave(updatedRole);
-            } else {
-                throw new Error("Falha ao atualizar o cargo.");
-            }
-            onClose();
+            await deleteRole(id);
+            toast({ title: "Sucesso", description: "Cargo deletado com sucesso." });
+            onRoleChange();
         } catch (error: any) {
             toast({
                 title: "Erro",
-                description: `Erro ao salvar cargo: ${error.message}`,
+                description: `Erro ao deletar cargo: ${error.message}`,
                 variant: "destructive",
             });
         }
     };
 
-    return (
-        <form onSubmit={handleSubmit} className="grid gap-4 py-4">
-        <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
-            Nome do Cargo
-            </Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} className="col-span-3" />
-        </div>
-        <div className="grid grid-cols-4 items-start gap-4">
-            <Label className="text-right mt-2">Permissões</Label>
-            <div className="col-span-3 grid grid-cols-2 gap-2">
-            {Object.keys(defaultPermissions).map((key) => {
-                const permissionKey = key as keyof Permissions;
-                const labelText = key
-                .replace(/([A-Z])/g, " $1")
-                .replace(/^./, (str) => str.toUpperCase());
-
-                return (
-                <div key={key} className="flex items-center space-x-2">
-                    <Checkbox
-                    id={permissionKey}
-                    checked={permissions[permissionKey]}
-                    onCheckedChange={(checked) =>
-                        handlePermissionChange(permissionKey, checked as boolean)
-                    }
-                    />
-                    <Label htmlFor={permissionKey}>{labelText}</Label>
-                </div>
-                );
-            })}
-            </div>
-        </div>
-        <DialogFooter>
-            <Button type="submit">Salvar Cargo</Button>
-        </DialogFooter>
-        </form>
-    );
-};
-
-export const RolesTable: React.FC<RolesTableProps> = ({ roles, onRoleChange }) => {
-    const [editingRole, setEditingRole] = useState<Role | undefined>(undefined);
-    const { toast } = useToast();
-
-    const handleDeleteRole = async (id: string) => {
-        if (window.confirm("Tem certeza que deseja deletar este cargo?")) {
-            try {
-                const success = await deleteRole(id);
-                if (success) {
-                    toast({ title: "Sucesso", description: "Cargo deletado com sucesso." });
-                    onRoleChange();
-                } else {
-                    throw new Error("Falha ao deletar o cargo.");
-                }
-            } catch (error: any) {
-                toast({
-                    title: "Erro",
-                    description: `Erro ao deletar cargo: ${error.message}`,
-                    variant: "destructive",
-                });
-            }
-        }
-    };
+    const rolesWithLabels = useMemo(() => {
+        return roles.map(role => ({
+            ...role,
+            permissionLabels: Object.entries(role.permissions)
+                .filter(([, value]) => value)
+                .map(([key]) => PERMISSION_LABELS[key as PermissionKey])
+        }));
+    }, [roles]);
 
     return (
-        <>
-            <div className="border rounded-md">
-                <Table>
-                    <TableHeader>
+        <div className="border rounded-lg overflow-hidden">
+            <Table>
+                <TableHeader>
                     <TableRow>
                         <TableHead>Nome</TableHead>
                         <TableHead>Permissões</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                    {roles.map((role) => (
+                </TableHeader>
+                <TableBody>
+                    {rolesWithLabels.map((role) => (
                         <TableRow key={role.id}>
-                        <TableCell className="font-medium">{role.name}</TableCell>
-                        <TableCell>
-                            <div className="flex flex-wrap gap-2">
-                            {Object.entries(role.permissions).map(([key, value]) => {
-                                const labelText = key
-                                .replace(/([A-Z])/g, " $1")
-                                .replace(/^./, (str) => str.toUpperCase());
-                                return value ? (
-                                <span
-                                    key={key}
-                                    className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
-                                >
-                                    {labelText}
-                                </span>
-                                ) : null;
-                            })}
-                            </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                            <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setEditingRole(role)}
-                            className="mr-2"
-                            >
-                            <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteRole(role.id)}
-                            >
-                            <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </TableCell>
+                            <TableCell className="font-medium">{role.name}</TableCell>
+                            <TableCell>
+                                <div className="flex flex-wrap gap-2">
+                                    {role.permissionLabels.map((label) => (
+                                        <span
+                                            key={label}
+                                            className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
+                                        >
+                                            {label}
+                                        </span>
+                                    ))}
+                                </div>
+                            </TableCell>
+                            <TableCell className="text-right space-x-2">
+                                <EditRoleSheet role={role} onRoleChange={onRoleChange} />
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Essa ação não pode ser desfeita. Isso irá deletar permanentemente o cargo e remover o acesso dos usuários associados.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleDeleteRole(role.id)}>
+                                                Deletar
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </TableCell>
                         </TableRow>
                     ))}
-                    </TableBody>
-                </Table>
-            </div>
-            {editingRole && (
-                <Dialog open={!!editingRole} onOpenChange={(isOpen) => !isOpen && setEditingRole(undefined)}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                        <DialogTitle>Editar Cargo</DialogTitle>
-                        <DialogDescription>
-                            Faça as alterações no cargo aqui.
-                        </DialogDescription>
-                        </DialogHeader>
-                        <RoleForm
-                            role={editingRole}
-                            onSave={() => {
-                                setEditingRole(undefined);
-                                onRoleChange();
-                            }}
-                            onClose={() => setEditingRole(undefined)}
-                        />
-                    </DialogContent>
-                </Dialog>
-            )}
-        </>
+                </TableBody>
+            </Table>
+        </div>
     );
-};
+}

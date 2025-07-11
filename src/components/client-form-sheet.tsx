@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Edit, Loader2 } from "lucide-react";
+import { Plus, Pencil, Loader2 } from "lucide-react";
 
 const formSchema = z.object({
   name: z.string().min(2, "Nome do cliente é obrigatório."),
