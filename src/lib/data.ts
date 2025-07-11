@@ -350,7 +350,7 @@ export const updateServiceOrderDetails = async (id: string, data: UpdateServiceO
         throw new Error("Service Order not found.");
     }
 
-    const oldOrderData = (await getServiceOrderById(id))!; 
+    const oldOrderData = (await getServiceOrderById(id))!; // get enriched data
 
     const changes: EditLogChange[] = [];
 
@@ -461,5 +461,110 @@ export const deleteServiceOrder = async (id: string): Promise<boolean> => {
     } catch (error) {
         console.error("Error deleting service order:", error);
         return false;
+    }
+};
+
+export const updateServiceOrder = async (
+    id: string, 
+    newStatusId: string, 
+    responsible: string, 
+    technicalSolution?: string, 
+    observation?: string, 
+    attachments?: string[], 
+    confirmedServiceIds?: string[]
+): Promise<UpdateServiceOrderResult> => {
+    const serviceOrderDocRef = doc(db, "serviceOrders", id);
+    
+    try {
+        const currentOrderSnap = await getDoc(serviceOrderDocRef);
+        if (!currentOrderSnap.exists()) {
+            return { updatedOrder: null, emailSent: false, emailErrorMessage: "Ordem de serviço não encontrada." };
+        }
+
+        const currentOrderData = currentOrderSnap.data();
+        const oldStatusId = currentOrderData.status;
+
+        const newLogEntry: LogEntry = {
+            timestamp: new Date(),
+            responsible,
+            fromStatus: oldStatusId,
+            toStatus: newStatusId,
+            observation: observation ?? undefined, 
+        };
+
+        const updatePayload: any = {};
+        let hasChanges = false;
+
+        if (newStatusId !== oldStatusId) {
+            updatePayload.status = newStatusId;
+            updatePayload.logs = arrayUnion(newLogEntry);
+            hasChanges = true;
+        } else if (observation) { // Also add log if only observation is added
+             updatePayload.logs = arrayUnion(newLogEntry);
+             hasChanges = true;
+        }
+        
+        if (technicalSolution !== undefined && technicalSolution !== currentOrderData.technicalSolution) {
+            updatePayload.technicalSolution = technicalSolution;
+            hasChanges = true;
+        }
+
+        if (attachments !== undefined) {
+            updatePayload.attachments = attachments;
+            hasChanges = true;
+        }
+
+        if (confirmedServiceIds !== undefined) {
+            updatePayload.confirmedServiceIds = confirmedServiceIds;
+            hasChanges = true;
+        }
+
+        if (hasChanges) {
+            await updateDoc(serviceOrderDocRef, updatePayload);
+        }
+
+        const updatedOrder = await getServiceOrderById(id);
+
+        // Email sending logic is now triggered on the client-side based on the status flag,
+        // but the API call is still made. We just need to ensure the data is fresh.
+        let emailSent = false;
+        let emailErrorMessage: string | undefined;
+
+        if (updatedOrder) {
+            const newStatusObjQuery = await getDoc(doc(db, 'statuses', newStatusId));
+            const triggersEmail = newStatusObjQuery.data()?.triggersEmail;
+            
+            if (triggersEmail && newStatusId !== oldStatusId) {
+                 const client = await getClientById(updatedOrder.clientId);
+                 const recipientEmail = client?.email || updatedOrder.collaborator.email;
+
+                 if (recipientEmail) {
+                    try {
+                        const response = await fetch('/api/send-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ serviceOrder: updatedOrder, client }),
+                        });
+                        const responseData = await response.json();
+                        if (!response.ok) {
+                            emailErrorMessage = `Falha ao enviar e-mail: ${responseData.message || response.statusText}`;
+                        } else {
+                            emailSent = true;
+                        }
+                    } catch (error) {
+                        emailErrorMessage = `Erro de rede ao tentar enviar e-mail: ${(error as Error).message}`;
+                    }
+                 } else {
+                    emailErrorMessage = 'Nenhum e-mail de destinatário válido.';
+                 }
+            }
+        }
+        
+        return { updatedOrder, emailSent, emailErrorMessage };
+
+    } catch (error) {
+        console.error("Error updating service order:", error);
+        const message = error instanceof Error ? error.message : "Erro desconhecido.";
+        return { updatedOrder: null, emailSent: false, emailErrorMessage: `Erro ao atualizar OS: ${message}` };
     }
 };

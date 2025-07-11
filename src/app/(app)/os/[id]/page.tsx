@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ServiceOrder, Status } from "@/lib/types";
-import { getServiceOrderById, getStatuses } from "@/lib/data";
+import { getServiceOrderById, getStatuses, updateServiceOrder } from "@/lib/data";
 import { useAuth } from "@/components/auth-provider";
 import { usePermissions } from "@/context/PermissionsContext";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,9 +40,6 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { EditOsDialog } from "@/components/edit-os-dialog";
 import { StatusBadge } from "@/components/status-badge";
-import { doc, updateDoc, arrayUnion } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-
 
 // Helper to translate field names for the edit history
 const getTranslatedFieldName = (field: string): string => {
@@ -79,7 +76,7 @@ export default function OsDetailPage() {
     const [order, setOrder] = useState<ServiceOrder | null>(null);
     const [loading, setLoading] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
-    const [selectedStatusId, setSelectedStatusId] = useState<string | undefined>();
+    const [currentStatus, setCurrentStatus] = useState<Status | undefined>();
     const [technicalSolution, setTechnicalSolution] = useState('');
     const [confirmedServiceIds, setConfirmedServiceIds] = useState<string[]>([]);
     const [isEditOsDialogOpen, setIsEditOsDialogOpen] = useState(false);
@@ -88,9 +85,7 @@ export default function OsDetailPage() {
         return order?.status?.name.toLowerCase() === 'entregue';
     }, [order]);
 
-    const selectedStatus = useMemo(() => statuses.find(s => s.id === selectedStatusId), [statuses, selectedStatusId]);
-
-    const isPickupStatusSelected = useMemo(() => selectedStatus?.isPickupStatus ?? false, [selectedStatus]);
+    const isPickupStatusSelected = useMemo(() => currentStatus?.isPickupStatus ?? false, [currentStatus]);
     const noteLabel = useMemo(() => isPickupStatusSelected ? "Solução Técnica" : "Nota", [isPickupStatusSelected]);
     const notePlaceholder = useMemo(() => isPickupStatusSelected ? "Descreva a solução técnica detalhadamente." : "Adicione uma nota (opcional).", [isPickupStatusSelected]);
 
@@ -132,7 +127,7 @@ export default function OsDetailPage() {
             ]);
             if (orderData) {
                 setOrder(orderData);
-                setSelectedStatusId(orderData.status.id);
+                setCurrentStatus(orderData.status);
                 setTechnicalSolution(orderData.technicalSolution || '');
                 setConfirmedServiceIds(orderData.confirmedServiceIds || []);
                 setStatuses(statusesData);
@@ -141,7 +136,6 @@ export default function OsDetailPage() {
                 router.push('/os');
             }
         } catch (error) {
-            console.error("Fetch error:", error);
             toast({ title: "Erro", description: "Não foi possível carregar a OS.", variant: "destructive" });
         } finally {
             setLoading(false);
@@ -151,10 +145,7 @@ export default function OsDetailPage() {
     const refreshOrder = useCallback(async () => {
         if (!id) return;
         const data = await getServiceOrderById(id);
-        if (data) {
-            setOrder(data);
-            setSelectedStatusId(data.status.id)
-        };
+        if (data) setOrder(data);
     }, [id]);
 
     useEffect(() => {
@@ -167,79 +158,94 @@ export default function OsDetailPage() {
     }, [loadingPermissions, hasPermission, router, fetchInitialData]);
 
     const handleUpdate = async () => {
-        if (!order || !selectedStatus || !user) return;
-    
-        if (selectedStatus.id === order.status.id) {
-            toast({ title: "Atenção", description: "Selecione um novo status para atualizar.", variant: "default" });
+        if (!order || !currentStatus || !user) return;
+        
+        if (!hasPermission('os')) {
+            toast({ title: "Acesso Negado", description: "Você não tem permissão para atualizar esta OS.", variant: "destructive" });
             return;
         }
-    
-        if (selectedStatus.isPickupStatus && !technicalSolution.trim()) {
-            toast({ title: "Erro de Validação", description: "A Solução Técnica é obrigatória para este status.", variant: "destructive" });
-            return;
-        }
-    
-        if (selectedStatus.triggersEmail && order.contractedServices?.some(s => !confirmedServiceIds.includes(s.id))) {
-            toast({ title: "Confirmação Pendente", description: "Confirme todos os serviços contratados antes de prosseguir.", variant: "destructive" });
-            return;
-        }
-    
-        setIsUpdating(true);
-    
-        const newLog = {
-            fromStatus: order.status.id,
-            toStatus: selectedStatus.id,
-            observation: technicalSolution.trim(),
-            responsible: user.name || user.email || "Usuário desconhecido",
-            timestamp: new Date(), // CORREÇÃO: Usar new Date() diretamente
-        };
-    
-        try {
-            const osRef = doc(db, 'serviceOrders', id);
-            await updateDoc(osRef, {
-                statusId: selectedStatus.id,
-                technicalSolution: technicalSolution.trim(),
-                confirmedServiceIds: confirmedServiceIds,
-                logs: arrayUnion(newLog),
+
+        // --- NEW: Validation for required technical solution ---
+        if (isPickupStatusSelected && !technicalSolution.trim()) {
+            toast({
+                title: "Campo Obrigatório",
+                description: "A Solução Técnica é obrigatória para o status de retirada.",
+                variant: "destructive",
             });
+            return;
+        }
     
-            if (selectedStatus.triggersEmail) {
-                try {
-                    const response = await fetch('/api/send-email', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            orderId: id,
-                            statusName: selectedStatus.name,
-                        }),
-                    });
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || 'Falha ao enviar e-mail de notificação.');
-                    }
-                    toast({ title: "Sucesso!", description: "OS atualizada e cliente notificado." });
-                } catch (emailError: any) {
-                    toast({ title: "OS Atualizada, mas...", description: `A OS foi salva, mas falhou ao enviar o e-mail: ${emailError.message}`, variant: "destructive" });
+        const oldStatusId = order.status.id;
+        const newStatusId = currentStatus.id;
+        const isStatusChanging = newStatusId !== oldStatusId;
+    
+        if (isStatusChanging && !hasPermission('adminSettings')) {
+            const isValidTransition = availableStatuses.some(s => s.id === newStatusId);
+            if (!isValidTransition) {
+                toast({ title: "Transição de Status Inválida", description: `Não é possível mover a OS para este status.`, variant: "destructive" });
+                setCurrentStatus(order.status);
+                return;
+            }
+        }
+    
+        const allContractedServicesConfirmed = order.contractedServices?.every(service =>
+            confirmedServiceIds.includes(service.id)
+        ) ?? true;
+            
+        if (currentStatus?.triggersEmail && !allContractedServicesConfirmed) {
+            toast({ title: "Serviços Pendentes", description: "Confirme todos os serviços contratados antes de avançar para um status que notifica o cliente.", variant: "destructive" });
+            return;
+        }
+    
+        if (!isStatusChanging && technicalSolution === (order.technicalSolution || '') && JSON.stringify(confirmedServiceIds.sort()) === JSON.stringify((order.confirmedServiceIds || []).sort())) {
+            toast({ title: "Nenhuma alteração", description: "Nenhuma alteração para salvar." });
+            return;
+        }
+
+        // --- FIX: Ensure observation is null, not undefined, when empty ---
+        const observationText = technicalSolution.trim() ? `${noteLabel}: ${technicalSolution.trim()}` : undefined;
+        
+        setIsUpdating(true);
+        try {
+            const result = await updateServiceOrder(
+                order.id, 
+                newStatusId, 
+                user.name, 
+                technicalSolution, 
+                observationText, 
+                order.attachments, 
+                confirmedServiceIds
+            );
+            
+            if (result.updatedOrder) {
+                setOrder(result.updatedOrder);
+                setCurrentStatus(result.updatedOrder.status);
+                toast({ title: "Sucesso", description: "OS atualizada com sucesso." });
+    
+                if (isStatusChanging) {
+                    setTechnicalSolution('');
+                }
+    
+                if (result.emailSent) {
+                    toast({ title: "Notificação por E-mail", description: "E-mail de notificação enviado ao cliente." });
+                } else if (result.emailErrorMessage) {
+                    toast({ title: "Erro no E-mail", description: `Não foi possível enviar e-mail: ${result.emailErrorMessage}`, variant: "destructive" });
                 }
             } else {
-                toast({ title: "Sucesso!", description: "Ordem de Serviço atualizada." });
+                 toast({ title: "Erro", description: result.emailErrorMessage || "Falha ao atualizar a OS.", variant: "destructive" });
             }
-    
-            fetchInitialData();
-    
         } catch (error) {
-            console.error("Error updating service order: ", error);
-            toast({ title: "Erro", description: "Não foi possível atualizar a OS.", variant: "destructive" });
+            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro.";
+            toast({ title: "Erro na Atualização", description: errorMessage, variant: "destructive" });
         } finally {
             setIsUpdating(false);
         }
     };
-    
 
     if (loadingPermissions || loading) return <OsDetailSkeleton />;
     if (!order || !hasPermission('os')) return <p>Acesso negado ou OS não encontrada.</p>;
 
-    const showServiceConfirmation = selectedStatus?.triggersEmail;
+    const showServiceConfirmation = currentStatus?.triggersEmail;
     const hasIncompleteServices = order.contractedServices?.some(service => !confirmedServiceIds.includes(service.id));
     const showAlertBanner = showServiceConfirmation && hasIncompleteServices;
 
@@ -317,7 +323,7 @@ export default function OsDetailPage() {
                             <CardContent className="space-y-4">
                                 <div className="space-y-2">
                                     <Label>Alterar Status para:</Label>
-                                    <Select value={selectedStatusId} onValueChange={setSelectedStatusId} disabled={isUpdating || isDelivered}>
+                                    <Select value={currentStatus?.id} onValueChange={(v) => setCurrentStatus(statuses.find(s => s.id === v))} disabled={isUpdating || isDelivered}>
                                         <SelectTrigger><SelectValue placeholder="Selecione o próximo status" /></SelectTrigger>
                                         <SelectContent>
                                             {order.status && <SelectItem value={order.status.id} disabled>-- {order.status.name} (Atual) --</SelectItem>}
