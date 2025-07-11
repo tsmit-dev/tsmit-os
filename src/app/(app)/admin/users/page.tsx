@@ -4,13 +4,14 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { User, Role } from "@/lib/types";
 import { getUsers, getRoles } from "@/lib/data";
-import { Users as UsersIcon } from "lucide-react";
+import { Users as UsersIcon, PlusCircle } from "lucide-react";
 import { UsersTable } from "@/components/users-table";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/context/PermissionsContext";
 import { Input } from "@/components/ui/input";
 import { PageLayout } from "@/components/page-layout";
-import { AddUserDialog } from "@/components/add-user-dialog";
+import { UserFormSheet } from "@/components/user-form-sheet";
+import { Button } from "@/components/ui/button";
 
 export default function ManageUsersPage() {
   const { hasPermission, loadingPermissions } = usePermissions();
@@ -74,7 +75,12 @@ export default function ManageUsersPage() {
   );
   
   const actionButton = (
-    <AddUserDialog onUserAdded={fetchData} roles={roles} />
+    <UserFormSheet onUserChange={fetchData} roles={roles}>
+      <Button>
+        <PlusCircle className="mr-2 h-4 w-4" />
+        Adicionar Usuário
+      </Button>
+    </UserFormSheet>
   );
 
   return (

@@ -60,6 +60,7 @@
     "react-hook-form": "^7.54.2",
     "react-markdown": "^10.1.0",
     "react-multi-select-component": "^4.3.4",
+    "react-query": "^3.39.3",
     "recharts": "^2.15.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
