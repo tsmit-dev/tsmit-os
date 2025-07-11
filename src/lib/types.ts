@@ -55,8 +55,7 @@ email?: string;
 cnpj?: string;
 address?: string;
 path?: string;
-contractedServiceIds?: string[]; // Array de IDs dos serviços contratados
-// Os campos abaixo serão substituídos gradualmente
+contractedServiceIds?: string[];
 webProtection?: boolean;
 backup?: boolean;
 edr?: boolean;
@@ -70,6 +69,7 @@ color: string;
 icon?: string;
 isInitial?: boolean;
 triggersEmail?: boolean;
+emailBody?: string;
 allowedNextStatuses?: string[];
 allowedPreviousStatuses?: string[];
 isPickupStatus?: boolean;
@@ -127,8 +127,8 @@ createdAt: Date;
 logs: LogEntry[];
 clientName?: string;
 attachments?: string[];
-contractedServices?: ProvidedService[]; // Armazena os objetos de serviço no momento da criação da OS
-confirmedServiceIds?: string[]; // Armazena os IDs dos serviços confirmados pelo técnico
+contractedServices?: ProvidedService[];
+confirmedServiceIds?: string[];
 editLogs?: EditLogEntry[];
 };
 

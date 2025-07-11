@@ -251,6 +251,35 @@ export const getStatuses = async (): Promise<Status[]> => {
     return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Status[];
 };
 
+export type StatusData = Omit<Status, 'id'>;
+
+export const addStatus = async (data: StatusData): Promise<Status> => {
+    const statusesCollection = collection(db, "statuses");
+    const newStatusRef = await addDoc(statusesCollection, data);
+    return { ...data, id: newStatusRef.id } as Status;
+};
+
+export const updateStatus = async (id: string, data: Partial<StatusData>): Promise<Status | null> => {
+    const statusDocRef = doc(db, "statuses", id);
+    await updateDoc(statusDocRef, data);
+    const updatedSnap = await getDoc(statusDocRef);
+    if (updatedSnap.exists()) {
+        return { ...updatedSnap.data(), id: updatedSnap.id } as Status;
+    }
+    return null;
+};
+
+export const deleteStatus = async (id: string): Promise<boolean> => {
+    const statusDocRef = doc(db, "statuses", id);
+    try {
+        await deleteDoc(statusDocRef);
+        return true;
+    } catch (error) {
+        console.error("Error deleting status:", error);
+        return false;
+    }
+};
+
 
 // --- SERVICE ORDERS ---
 
@@ -533,7 +562,8 @@ export const updateServiceOrder = async (
 
         if (updatedOrder) {
             const newStatusObjQuery = await getDoc(doc(db, 'statuses', newStatusId));
-            const triggersEmail = newStatusObjQuery.data()?.triggersEmail;
+            const newStatusData = newStatusObjQuery.data();
+            const triggersEmail = newStatusData?.triggersEmail;
             
             if (triggersEmail && newStatusId !== oldStatusId) {
                  const client = await getClientById(updatedOrder.clientId);
@@ -544,7 +574,11 @@ export const updateServiceOrder = async (
                         const response = await fetch('/api/send-email', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ serviceOrder: updatedOrder, client }),
+                            body: JSON.stringify({ 
+                                serviceOrder: updatedOrder, 
+                                client,
+                                emailBody: newStatusData?.emailBody
+                            }),
                         });
                         const responseData = await response.json();
                         if (!response.ok) {

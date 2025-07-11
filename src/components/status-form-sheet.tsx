@@ -15,6 +15,8 @@ import { Pencil, Plus } from 'lucide-react';
 import { IconPicker } from './icon-picker';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { TwitterPicker } from 'react-color';
+import { Textarea } from './ui/textarea';
+import { addStatus, updateStatus } from '@/lib/data';
 
 const statusSchema = z.object({
     name: z.string().min(1, 'O nome é obrigatório.'),
@@ -25,6 +27,7 @@ const statusSchema = z.object({
     isInitial: z.boolean().default(false),
     isPickupStatus: z.boolean().default(false),
     triggersEmail: z.boolean().default(false),
+    emailBody: z.string().optional(),
 });
 
 interface StatusFormSheetProps {
@@ -43,6 +46,7 @@ export function StatusFormSheet({ children, status, onStatusChange, allStatuses 
     defaultValues: status ? {
         ...status,
         order: status.order ?? 0,
+        emailBody: status.emailBody || '',
     } : {
         name: '',
         order: (allStatuses.length > 0 ? Math.max(...allStatuses.map(s => s.order)) + 1 : 1),
@@ -52,16 +56,19 @@ export function StatusFormSheet({ children, status, onStatusChange, allStatuses 
         isInitial: false,
         isPickupStatus: false,
         triggersEmail: false,
+        emailBody: '',
     },
   });
+
+  const triggersEmail = form.watch('triggersEmail');
 
   const onSubmit = async (values: z.infer<typeof statusSchema>) => {
     try {
       if (status) {
-        // await updateStatus(status.id, values);
+        await updateStatus(status.id, values);
         toast({ title: 'Sucesso', description: 'Status atualizado com sucesso.' });
       } else {
-        // await addStatus(values);
+        await addStatus(values);
         toast({ title: 'Sucesso', description: 'Status adicionado com sucesso.' });
       }
       onStatusChange();
@@ -151,6 +158,15 @@ export function StatusFormSheet({ children, status, onStatusChange, allStatuses 
                         </FormItem>
                     )} />
                 </div>
+                {triggersEmail && (
+                  <FormField control={form.control} name="emailBody" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Corpo do Email</FormLabel>
+                      <FormControl><Textarea {...field} rows={5} placeholder="Ex: Olá {client_name}, a sua Ordem de Serviço nº {os_number} mudou para o status: {status_name}." /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                )}
               <div className="flex justify-end space-x-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancelar</Button>
                 <Button type="submit">Salvar</Button>
