@@ -6,7 +6,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { usePermissions } from '@/context/PermissionsContext';
 import { StatusesProvider } from '@/hooks/use-statuses';
 import { SidebarNav } from '@/components/sidebar-nav';
-import { QueryProvider } from '@/components/query-provider'; // Importar o QueryProvider
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -34,7 +33,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <QueryProvider> {/* Adicionado o QueryProvider aqui */}
       <StatusesProvider>
         <div className="grid min-h-screen w-full lg:grid-cols-[280px_1fr]">
           <SidebarNav />
@@ -45,6 +43,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </StatusesProvider>
-    </QueryProvider>
   );
 }
