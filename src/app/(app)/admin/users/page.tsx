@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { User, Role } from "@/lib/types";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getUsers, getRoles } from "@/lib/data";
 import { Users as UsersIcon, PlusCircle } from "lucide-react";
 import { UsersTable } from "@/components/users-table";
 import { useToast } from "@/hooks/use-toast";
@@ -29,21 +28,7 @@ export default function ManageUsersPage() {
   const fetchData = useCallback(async () => {
     setLoadingData(true);
     try {
-      const [usersSnap, rolesSnap] = await Promise.all([
-        getDocs(collection(db, "users")),
-        getDocs(collection(db, "roles")),
-      ]);
-
-      const usersData: User[] = usersSnap.docs.map(doc => ({
-        id: doc.id,
-        ...(doc.data() as Omit<User, "id">),
-      }));
-
-      const rolesData: Role[] = rolesSnap.docs.map(doc => ({
-        id: doc.id,
-        ...(doc.data() as Omit<Role, "id">),
-      }));
-
+      const [usersData, rolesData] = await Promise.all([getUsers(), getRoles()]);
       setUsers(usersData);
       setRoles(rolesData);
     } catch (error) {
@@ -77,9 +62,7 @@ export default function ManageUsersPage() {
     (user) =>
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.role?.name ?? "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase())
+      (user.role?.name ?? "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const searchBar = (
@@ -90,7 +73,7 @@ export default function ManageUsersPage() {
       className="w-full sm:w-80"
     />
   );
-
+  
   const actionButton = (
     <UserFormSheet onUserChange={fetchData} roles={roles}>
       <Button>
@@ -102,15 +85,15 @@ export default function ManageUsersPage() {
 
   return (
     <PageLayout
-      title="Gerenciamento de Usuários"
-      description="Nesta página, você pode gerenciar os usuários cadastrados no sistema."
-      icon={<UsersIcon className="w-8 h-8 text-primary" />}
-      isLoading={loadingPermissions || loadingData}
-      canAccess={canAccess}
-      searchBar={searchBar}
-      actionButton={actionButton}
+        title="Gerenciamento de Usuários"
+        description="Nesta página, você pode gerenciar os usuários cadastrados no sistema."
+        icon={<UsersIcon className="w-8 h-8 text-primary" />}
+        isLoading={loadingPermissions || loadingData}
+        canAccess={canAccess}
+        searchBar={searchBar}
+        actionButton={actionButton}
     >
-      <UsersTable users={filteredUsers} onUserChange={fetchData} />
+        <UsersTable users={filteredUsers} roles={roles} onUserChange={fetchData} />
     </PageLayout>
   );
 }

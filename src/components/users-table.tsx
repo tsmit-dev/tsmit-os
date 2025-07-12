@@ -9,22 +9,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { User } from "@/lib/types";
+import { User, Role } from "@/lib/types";
 import { useMemo } from "react";
-import { getRoles } from "@/lib/data";
-import { useQuery } from "react-query";
 import { EditUserSheet } from "./user-form-sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { User as UserIcon, Mail, Shield } from "lucide-react";
 
 interface UsersTableProps {
   users: User[];
+  roles: Role[];
   onUserChange: () => void;
 }
 
-export function UsersTable({ users, onUserChange }: UsersTableProps) {
+export function UsersTable({ users, roles, onUserChange }: UsersTableProps) {
     const isMobile = useIsMobile();
-    const { data: roles } = useQuery('roles', getRoles);
 
     const usersWithRoles = useMemo(() => {
         return users.map((user) => {
