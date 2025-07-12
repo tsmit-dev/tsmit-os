@@ -4,7 +4,6 @@ import './globals.css';
 import { AuthProvider } from '@/components/auth-provider';
 import { Toaster } from "@/components/ui/toaster";
 import { PermissionsProvider } from '@/context/PermissionsContext';
-import { QueryProvider } from '@/components/query-provider'; // Importe o QueryProvider
 
 export const metadata: Metadata = {
   title: 'TSMIT - Sistema de Controle de OS',
@@ -31,10 +30,8 @@ export default function RootLayout({
       <body className="font-body antialiased h-full">
         <AuthProvider>
           <PermissionsProvider>
-            <QueryProvider> {/* Envolva a aplicação com o QueryProvider */}
               {children}
               <Toaster />
-            </QueryProvider>
           </PermissionsProvider>
         </AuthProvider>
       </body>

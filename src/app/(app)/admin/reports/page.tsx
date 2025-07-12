@@ -7,7 +7,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { LineChart as ChartIcon, Filter, Search, FileDown, CalendarIcon } from 'lucide-react';
 import { usePermissions } from "@/context/PermissionsContext";
 import { useToast } from "@/hooks/use-toast";
-import { ServiceOrder, ServiceOrderStatus, User } from "@/lib/types";
+import { ServiceOrder, Status, User } from "@/lib/types";
 import { getServiceOrders, getUsers } from "@/lib/data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -38,7 +38,7 @@ export default function ReportsPage() {
     const [isCalendarOpen, setIsCalendarOpen] = useState(false); // New state to control calendar popover
 
     // Filter states
-    const [selectedStatus, setSelectedStatus] = useState<ServiceOrderStatus | 'all'>('all');
+    const [selectedStatus, setSelectedStatus] = useState<string | 'all'>('all');
     const [selectedAnalyst, setSelectedAnalyst] = useState<string | 'all'>('all');
     const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
     const [searchTerm, setSearchTerm] = useState('');
@@ -85,7 +85,7 @@ export default function ReportsPage() {
 
         // Filter by status
         if (selectedStatus !== 'all') {
-            updatedOrders = updatedOrders.filter(order => order.status === selectedStatus);
+            updatedOrders = updatedOrders.filter(order => order.status.name === selectedStatus);
         }
 
         // Filter by analyst
@@ -227,7 +227,7 @@ export default function ReportsPage() {
         );
     }
 
-    const serviceOrderStatuses: ServiceOrderStatus[] = ['aberta', 'em_analise', 'aguardando_peca', 'pronta_entrega', 'entregue'];
+    const serviceOrderStatuses: string[] = ['aberta', 'em_analise', 'aguardando_peca', 'pronta_entrega', 'entregue'];
 
     return (
         <div className="container mx-auto space-y-6 print:hidden" id="report-page-container">
@@ -255,7 +255,7 @@ export default function ReportsPage() {
                         <Label htmlFor="status-filter" className="mb-1 block">Status</Label>
                         <Select
                             value={selectedStatus}
-                            onValueChange={(value: ServiceOrderStatus | 'all') => setSelectedStatus(value)}
+                            onValueChange={(value) => setSelectedStatus(value)}
                         >
                             <SelectTrigger id="status-filter">
                                 <SelectValue placeholder="Todos os Status" />
@@ -278,7 +278,7 @@ export default function ReportsPage() {
                         <Label htmlFor="analyst-filter" className="mb-1 block">Analista</Label>
                         <Select
                             value={selectedAnalyst}
-                            onValueChange={(value: string | 'all') => setSelectedAnalyst(value)}
+                            onValueChange={(value) => setSelectedAnalyst(value)}
                         >
                             <SelectTrigger id="analyst-filter">
                                 <SelectValue placeholder="Todos os Analistas" />
