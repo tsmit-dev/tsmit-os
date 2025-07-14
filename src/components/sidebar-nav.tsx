@@ -102,14 +102,16 @@ export function SidebarNav() {
                             <span className="sr-only">Toggle navigation menu</span>
                         </Button>
                     </SheetTrigger>
-                    <SheetContent side="left" className="flex flex-col">
+                    <SheetContent side="left" className="flex flex-col p-0">
                         <div className="flex h-14 items-center border-b px-4">
                             <Link href="/dashboard">
                                 <TsmitLogo className="w-28 h-auto" />
                             </Link>
                         </div>
-                        <NavLinks />
-                        <div className="mt-auto p-4">
+                        <div className='flex-1 overflow-y-auto py-4'>
+                           <NavLinks />
+                        </div>
+                        <div className="mt-auto border-t p-4">
                             <div className='text-center space-y-1 mb-4'>
                                 <p className="text-sm font-semibold truncate" title={user?.email ?? ''}>{user?.name}</p>
                                 <Badge variant="outline">{userRole?.name || ''}</Badge>
@@ -130,10 +132,10 @@ export function SidebarNav() {
                             <TsmitLogo className="w-28 h-auto" />
                         </Link>
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 overflow-y-auto">
                         <NavLinks />
                     </div>
-                    <div className="mt-auto p-4">
+                    <div className="mt-auto border-t p-4">
                          <div className='p-2 text-center space-y-1'>
                             <p className="text-sm font-semibold truncate" title={user?.email ?? ''}>{user?.name}</p>
                             <Badge variant="outline">{userRole?.name || ''}</Badge>
