@@ -125,26 +125,38 @@ export function SidebarNav() {
             </header>
 
             {/* Desktop Sidebar */}
-            <div className="hidden border-r bg-muted/40 lg:block">
-                <div className="flex h-full max-h-screen flex-col gap-2">
-                    <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-                        <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-                            <TsmitLogo className="w-28 h-auto" />
-                        </Link>
+            <div className="hidden lg:flex lg:flex-col lg:h-screen lg:border-r lg:bg-muted/40">
+            {/* topo: logo */}
+            <div className="flex h-[60px] items-center border-b px-6">
+                <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+                <TsmitLogo className="w-28 h-auto" />
+                </Link>
+            </div>
+
+            {/* meio: links com scroll */}
+            <nav className="flex-1 overflow-y-auto px-6 py-4">
+                <NavLinks />
+            </nav>
+
+            {/* rodapé: perfil + logout */}
+            <div className="border-t px-6 py-4">
+                <div className="p-2 text-center space-y-1">
+                    <p
+                        className="text-sm font-semibold truncate"
+                        title={user?.email ?? ''}
+                    >
+                        {user?.name}
+                    </p>
+                    <Badge variant="outline">{userRole?.name || ''}</Badge>
                     </div>
-                    <div className="flex-1 overflow-y-auto">
-                        <NavLinks />
-                    </div>
-                    <div className="mt-auto border-t p-4">
-                         <div className='p-2 text-center space-y-1'>
-                            <p className="text-sm font-semibold truncate" title={user?.email ?? ''}>{user?.name}</p>
-                            <Badge variant="outline">{userRole?.name || ''}</Badge>
-                        </div>
-                        <Button onClick={handleLogout} variant="ghost" className="w-full justify-start">
-                            <LogOut className="mr-2 h-4 w-4" />
-                            Sair
-                        </Button>
-                    </div>
+                    <Button
+                    onClick={handleLogout}
+                    variant="ghost"
+                    className="w-full justify-start mt-2"
+                    >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sair
+                    </Button>
                 </div>
             </div>
         </>
